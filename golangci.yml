@@ -1,0 +1,337 @@
+run:
+  # Timeout for analysis
+  timeout: 5m
+  
+  # Exit code when at least one issue was found
+  issues-exit-code: 1
+  
+  # Include test files
+  tests: true
+  
+  # List of build tags
+  build-tags:
+    - integration
+    - e2e
+    - performance
+  
+  
+
+output:
+  # Format of output
+  format: colored-line-number
+  
+  # Print lines of code with issue
+  print-issued-lines: true
+  
+  # Print linter name in the end of issue text
+  print-linter-name: true
+  
+  # Make issues output unique by line
+  uniq-by-line: true
+  
+  # Sort results by: filepath, line and column
+  sort-results: true
+
+linters:
+  enable:
+    # Enabled by default
+    - errcheck
+    - gosimple
+    - govet
+    - ineffassign
+    - staticcheck
+    - typecheck
+    - unused
+    
+    # Additional linters
+    - bodyclose
+    - cyclop
+    - dupl
+    - durationcheck
+    - errorlint
+    - exhaustive
+    - exportloopref
+    - gci
+    - gochecknoinits
+    - gocognit
+    - goconst
+    - gocritic
+    - gocyclo
+    - godot
+    - gofmt
+    - gofumpt
+    - goimports
+    - gomnd
+    - goprintffuncname
+    - gosec
+    - lll
+    - makezero
+    - misspell
+    - nakedret
+    - nestif
+    - nilerr
+    - nlreturn
+    - noctx
+    - nolintlint
+    - prealloc
+    - predeclared
+    - revive
+    - rowserrcheck
+    - sqlclosecheck
+    - stylecheck
+    - tparallel
+    - unconvert
+    - unparam
+    - wastedassign
+    - whitespace
+
+  disable:
+    # Deprecated
+    - golint
+    - interfacer
+    - maligned
+    - scopelint
+    
+    # Too strict
+    - exhaustivestruct
+    - gochecknoglobals
+    - godox
+    - goerr113
+    - wrapcheck
+    - wsl
+
+linters-settings:
+  cyclop:
+    max-complexity: 15
+    
+  dupl:
+    threshold: 100
+    
+  errorlint:
+    errorf: true
+    
+  exhaustive:
+    default-signifies-exhaustive: true
+    
+  gci:
+    sections:
+      - standard
+      - default
+      - prefix(flakedrop)
+      
+  gocognit:
+    min-complexity: 20
+    
+  goconst:
+    min-len: 3
+    min-occurrences: 3
+    
+  gocritic:
+    enabled-tags:
+      - diagnostic
+      - experimental
+      - opinionated
+      - performance
+      - style
+    disabled-checks:
+      - dupImport
+      - ifElseChain
+      - octalLiteral
+      - whyNoLint
+      - wrapperFunc
+      
+  gocyclo:
+    min-complexity: 15
+    
+  godot:
+    scope: declarations
+    capital: true
+    
+  gofmt:
+    simplify: true
+    
+  gomnd:
+    settings:
+      mnd:
+        checks:
+          - argument
+          - case
+          - condition
+          - operation
+          - return
+          - assign
+        ignored-numbers:
+          - "0"
+          - "1"
+          - "2"
+          - "10"
+          - "100"
+          
+  gosec:
+    severity: medium
+    confidence: medium
+    excludes:
+      - G204 # Subprocess launched with variable
+      - G304 # Potential file inclusion via variable
+      
+  govet:
+    check-shadowing: true
+    enable-all: true
+    
+  lll:
+    line-length: 120
+    tab-width: 4
+    
+  misspell:
+    locale: US
+    
+  nakedret:
+    max-func-lines: 30
+    
+  nestif:
+    min-complexity: 4
+    
+  prealloc:
+    simple: true
+    range-loops: true
+    for-loops: true
+    
+  revive:
+    ignore-generated-header: true
+    severity: warning
+    rules:
+      - name: blank-imports
+      - name: context-as-argument
+      - name: context-keys-type
+      - name: dot-imports
+      - name: error-return
+      - name: error-strings
+      - name: error-naming
+      - name: exported
+      - name: if-return
+      - name: increment-decrement
+      - name: var-naming
+      - name: var-declaration
+      - name: package-comments
+      - name: range
+      - name: receiver-naming
+      - name: time-naming
+      - name: unexported-return
+      - name: indent-error-flow
+      - name: errorf
+      - name: empty-block
+      - name: superfluous-else
+      - name: unused-parameter
+      - name: unreachable-code
+      - name: redefines-builtin-id
+      
+  stylecheck:
+    go: "1.21"
+    checks: ["all", "-ST1000", "-ST1003", "-ST1016", "-ST1020", "-ST1021", "-ST1022"]
+    dot-import-whitelist:
+      - fmt
+    initialisms: ["ACL", "API", "ASCII", "CPU", "CSS", "DNS", "EOF", "GUID", "HTML", "HTTP", "HTTPS", "ID", "IP", "JSON", "QPS", "RAM", "RPC", "SLA", "SMTP", "SQL", "SSH", "TCP", "TLS", "TTL", "UDP", "UI", "GID", "UID", "UUID", "URI", "URL", "UTF8", "VM", "XML", "XMPP", "XSRF", "XSS"]
+    http-status-code-whitelist: ["200", "400", "404", "500"]
+    
+  unparam:
+    check-exported: false
+    
+  unused:
+    check-exported: false
+
+issues:
+  # Maximum issues count per one linter
+  max-issues-per-linter: 50
+  
+  # Maximum count of issues with the same text
+  max-same-issues: 3
+  
+  # Show only new issues
+  new: false
+  
+  # Fix found issues (if it's supported by the linter)
+  fix: false
+  
+  # Exclude directories
+  exclude-dirs:
+    - vendor
+    - third_party
+    - testdata
+    - examples
+  
+  # Exclude files
+  exclude-files:
+    - ".*\\.pb\\.go$"
+    - ".*\\.gen\\.go$"
+    - "examples/.*\\.go$"
+  
+  exclude-rules:
+    # Exclude some linters from running on tests files
+    - path: _test\.go
+      linters:
+        - gocyclo
+        - errcheck
+        - dupl
+        - gosec
+        - gomnd
+        
+    # Exclude known issues in generated files
+    - path: \.gen\.go
+      linters:
+        - gocyclo
+        - errcheck
+        - dupl
+        - gosec
+        - gomnd
+        
+    # Exclude lll issues for long lines with go:generate
+    - linters:
+        - lll
+      source: "^//go:generate "
+      
+    # Exclude some staticcheck messages
+    - linters:
+        - staticcheck
+      text: "SA9003:"
+      
+    # Exclude some golint messages
+    - linters:
+        - golint
+      text: "should have comment"
+      
+    # Exclude some revive messages
+    - linters:
+        - revive
+      text: "exported method"
+      
+  # Independently from option `exclude` we use default exclude patterns
+  exclude-use-default: false
+  
+  # The list of ids of default excludes to include or disable
+  include:
+    - EXC0002 # disable excluding of issues about comments from golint
+
+severity:
+  # Default value is empty string.
+  # Set the default severity for issues.
+  # If severity rules are defined and the issues do not match or no severity is provided to the rule
+  # this will be the default severity applied.
+  # Severities should match the supported severity names of the selected out format.
+  # - Code climate: https://docs.codeclimate.com/docs/issues#issue-severity
+  # - Checkstyle: https://checkstyle.sourceforge.io/property_types.html#severity
+  # - GitHub: https://help.github.com/en/actions/reference/workflow-commands-for-github-actions#setting-an-error-message
+  default-severity: error
+  
+  # The default value is false.
+  # If set to true severity-rules regular expressions become case sensitive.
+  case-sensitive: false
+  
+  # Default value is empty list.
+  # When a list of severity rules are provided, severity information will be added to lint
+  # issues. Severity rules have the same filtering capability as exclude rules except you
+  # are allowed to specify one matcher per severity rule.
+  # Only affects out formats that support setting severity information.
+  rules:
+    - linters:
+        - dupl
+      severity: info

@@ -1,0 +1,56 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+
+      - name: Build executables
+        run: |
+          mkdir -p build
+          
+          # Build for multiple platforms
+          GOOS=darwin GOARCH=amd64 go build -ldflags="-s -w" -o build/flakedrop-darwin-amd64 main.go
+          GOOS=darwin GOARCH=arm64 go build -ldflags="-s -w" -o build/flakedrop-darwin-arm64 main.go
+          GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o build/flakedrop-linux-amd64 main.go
+          GOOS=linux GOARCH=arm64 go build -ldflags="-s -w" -o build/flakedrop-linux-arm64 main.go
+          GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" -o build/flakedrop-windows-amd64.exe main.go
+          
+          # Create universal macOS binary
+          lipo -create -output build/flakedrop-darwin build/flakedrop-darwin-amd64 build/flakedrop-darwin-arm64
+          
+          # Create archives
+          cd build
+          tar -czf flakedrop-darwin.tar.gz flakedrop-darwin
+          tar -czf flakedrop-linux-amd64.tar.gz flakedrop-linux-amd64
+          tar -czf flakedrop-linux-arm64.tar.gz flakedrop-linux-arm64
+          zip flakedrop-windows-amd64.zip flakedrop-windows-amd64.exe
+          
+          # Generate checksums
+          shasum -a 256 *.tar.gz *.zip > checksums.txt
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            build/*.tar.gz
+            build/*.zip
+            build/checksums.txt
+          draft: false
+          prerelease: false
+          generate_release_notes: true

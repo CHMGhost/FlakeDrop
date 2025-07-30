@@ -1,0 +1,21 @@
+# Example FlakeDrop Configuration
+# Copy this file to ~/.flakedrop/config.yaml and update with your values
+
+repositories:
+  - name: "analytics"
+    git_url: "https://github.com/company/analytics-repo.git"
+    branch: "main"
+    database: "ANALYTICS_DB"
+    schema: "PUBLIC"
+    
+snowflake:
+  account: "xy12345.us-east-1"
+  username: "DEPLOY_USER"
+  password: ""  # Will be encrypted when saved
+  role: "DEPLOYMENT_ROLE"
+  warehouse: "DEPLOY_WH"
+  
+license:
+  key: ""
+  expires_at: ""
+  last_check: ""

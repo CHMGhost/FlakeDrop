@@ -1,0 +1,354 @@
+# Observability Configuration for FlakeDrop CLI
+# This file configures all aspects of monitoring, logging, tracing, and health checks
+
+# Logging Configuration
+logging:
+  # Log level: debug, info, warn, error, fatal
+  level: info
+  
+  # Log format: json, text
+  format: json
+  
+  # Log output: stdout, stderr, or file path
+  output: stdout
+  
+  # Enable caller information in logs
+  include_caller: true
+  
+  # Enable stack traces for errors
+  include_stack: true
+
+# Metrics Configuration
+metrics:
+  # Enable metrics collection
+  enabled: true
+  
+  # Metrics prefix for all metric names
+  prefix: snowflake_deploy
+  
+  # Collection interval for system metrics
+  collection_interval: 30s
+  
+  # Custom metric definitions
+  custom_metrics:
+    - name: deployment_files_processed
+      type: counter
+      help: Total number of files processed during deployments
+      
+    - name: snowflake_connection_pool_size
+      type: gauge
+      help: Current size of Snowflake connection pool
+      
+    - name: git_operation_latency
+      type: histogram
+      help: Latency of git operations
+      buckets: [0.1, 0.5, 1.0, 2.0, 5.0, 10.0]
+
+# Tracing Configuration
+tracing:
+  # Enable distributed tracing
+  enabled: true
+  
+  # Sampling rate (0.0 to 1.0)
+  sample_rate: 1.0
+  
+  # Service name for traces
+  service_name: flakedrop
+  
+  # Trace timeout
+  timeout: 30s
+  
+  # Span attributes to include
+  default_attributes:
+    service.version: "1.0.0"
+    deployment.env: production
+    
+  # Operations to always trace
+  always_trace:
+    - deploy.main
+    - snowflake.connect
+    - git.operations
+    - file.execution
+
+# Health Check Configuration
+health:
+  # Enable health checks
+  enabled: true
+  
+  # Health check timeout
+  timeout: 10s
+  
+  # Interval between health checks for proactive monitoring
+  check_interval: 30s
+  
+  # Custom health checks
+  checks:
+    - name: snowflake_connectivity
+      type: database
+      config:
+        connection_string: "${SNOWFLAKE_CONNECTION}"
+        test_query: "SELECT 1"
+        timeout: 5s
+        
+    - name: git_repository_access
+      type: custom
+      config:
+        script: "git ls-remote ${GIT_REPOSITORY} HEAD"
+        timeout: 10s
+        
+    - name: memory_usage
+      type: memory
+      config:
+        warning_threshold: 0.8
+        critical_threshold: 0.95
+        
+    - name: disk_space
+      type: disk
+      config:
+        path: /tmp
+        warning_threshold: 0.8
+        critical_threshold: 0.95
+
+# Dashboard Configuration
+dashboard:
+  # Enable web dashboard
+  enabled: true
+  
+  # Dashboard server port
+  port: 8080
+  
+  # Dashboard path prefix
+  path: /dashboard
+  
+  # Enable CORS for cross-origin requests
+  cors_enabled: true
+  
+  # Auto-refresh interval for dashboard
+  refresh_interval: 30s
+  
+  # Dashboard theme: light, dark, auto
+  theme: auto
+  
+  # Custom panels
+  custom_panels:
+    - name: deployment_overview
+      type: chart
+      metrics:
+        - deployments_total
+        - deployments_success_total
+        - deployments_failure_total
+      chart_type: line
+      
+    - name: performance_metrics
+      type: chart
+      metrics:
+        - deployment_duration_seconds
+        - snowflake_query_duration_seconds
+      chart_type: histogram
+
+# Alerting Configuration
+alerting:
+  # Enable alerting
+  enabled: true
+  
+  # Alert check interval
+  check_interval: 1m
+  
+  # Default alert rules
+  rules:
+    - name: high_error_rate
+      description: "Deployment error rate is above threshold"
+      condition: |
+        (deployments_failure_total / deployments_total) > 0.1
+      severity: error
+      cooldown: 5m
+      
+    - name: slow_deployments
+      description: "Deployment duration is above threshold"
+      condition: |
+        deployment_duration_seconds > 300
+      severity: warning
+      cooldown: 2m
+      
+    - name: memory_pressure
+      description: "Memory usage is critically high"
+      condition: |
+        system_memory_usage_percent > 90
+      severity: critical
+      cooldown: 1m
+      
+    - name: snowflake_connection_issues
+      description: "Snowflake connection failures detected"
+      condition: |
+        snowflake_connection_errors_total > 5
+      severity: error
+      cooldown: 3m
+      
+    - name: health_check_failures
+      description: "Health check is failing"
+      condition: |
+        health_status != "UP"
+      severity: critical
+      cooldown: 30s
+  
+  # Alert destinations
+  destinations:
+    - name: console
+      type: console
+      enabled: true
+      
+    - name: webhook
+      type: webhook
+      enabled: false
+      config:
+        url: https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK
+        method: POST
+        headers:
+          Content-Type: application/json
+        template: |
+          {
+            "text": "Alert: {{ .Name }}",
+            "attachments": [
+              {
+                "color": "{{ if eq .Severity \"critical\" }}danger{{ else if eq .Severity \"error\" }}warning{{ else }}good{{ end }}",
+                "fields": [
+                  {
+                    "title": "Description",
+                    "value": "{{ .Description }}",
+                    "short": false
+                  },
+                  {
+                    "title": "Severity",
+                    "value": "{{ .Severity }}",
+                    "short": true
+                  },
+                  {
+                    "title": "Timestamp",
+                    "value": "{{ .Timestamp }}",
+                    "short": true
+                  }
+                ]
+              }
+            ]
+          }
+
+# Performance Profiling Configuration
+profiling:
+  # Enable performance profiling
+  enabled: true
+  
+  # CPU profiling
+  cpu:
+    enabled: true
+    duration: 30s
+    
+  # Memory profiling
+  memory:
+    enabled: true
+    interval: 10s
+    
+  # Goroutine profiling
+  goroutine:
+    enabled: true
+    
+  # Block profiling
+  block:
+    enabled: false
+    rate: 1
+    
+  # Mutex profiling
+  mutex:
+    enabled: false
+    rate: 1
+
+# Service Information
+service:
+  # Service name
+  name: flakedrop
+  
+  # Service version
+  version: 1.0.0
+  
+  # Environment (development, staging, production)
+  environment: production
+  
+  # Additional metadata
+  metadata:
+    team: data-platform
+    component: deployment-cli
+    repository: https://github.com/company/flakedrop
+
+# Integration Configuration
+integrations:
+  # Prometheus integration
+  prometheus:
+    enabled: true
+    endpoint: /metrics
+    registry: default
+    
+  # Grafana integration
+  grafana:
+    enabled: false
+    dashboard_url: https://grafana.company.com/d/flakedrop
+    
+  # Jaeger tracing
+  jaeger:
+    enabled: false
+    endpoint: http://jaeger:14268/api/traces
+    
+  # ELK Stack integration
+  elasticsearch:
+    enabled: false
+    endpoint: http://elasticsearch:9200
+    index_pattern: flakedrop-logs
+    
+  # Kubernetes integration
+  kubernetes:
+    enabled: false
+    namespace: data-platform
+    labels:
+      app: flakedrop
+      component: cli
+      
+# Security Configuration
+security:
+  # Enable authentication for dashboard
+  auth_enabled: false
+  
+  # Basic auth credentials (if auth_enabled is true)
+  basic_auth:
+    username: admin
+    password_env: DASHBOARD_PASSWORD
+    
+  # TLS configuration for dashboard
+  tls:
+    enabled: false
+    cert_file: /etc/tls/server.crt
+    key_file: /etc/tls/server.key
+    
+  # Rate limiting
+  rate_limiting:
+    enabled: true
+    requests_per_minute: 100
+    
+  # IP whitelist for dashboard access
+  ip_whitelist:
+    - 127.0.0.1
+    - 10.0.0.0/8
+    - 192.168.0.0/16
+
+# Development Configuration
+development:
+  # Enable development mode with additional debugging
+  debug_mode: false
+  
+  # Mock external dependencies
+  mock_snowflake: false
+  mock_git: false
+  
+  # Generate sample data for testing
+  generate_sample_data: false
+  
+  # Enable pprof endpoints
+  pprof_enabled: false
+  pprof_port: 6060

@@ -1,0 +1,211 @@
+name: Schema Drift Detection
+
+on:
+  schedule:
+    # Run daily at 2 AM UTC
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+    inputs:
+      source_env:
+        description: 'Source environment'
+        required: true
+        default: 'prod'
+      target_env:
+        description: 'Target environment'
+        required: true
+        default: 'dev'
+
+jobs:
+  schema-drift-check:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.21'
+
+    - name: Install FlakeDrop CLI
+      run: |
+        go build -o flakedrop .
+        chmod +x flakedrop
+        sudo mv flakedrop /usr/local/bin/
+
+    - name: Configure Snowflake credentials
+      env:
+        SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+        SNOWFLAKE_USERNAME: ${{ secrets.SNOWFLAKE_USERNAME }}
+        SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
+        SNOWFLAKE_ROLE: ${{ secrets.SNOWFLAKE_ROLE }}
+        SNOWFLAKE_WAREHOUSE: ${{ secrets.SNOWFLAKE_WAREHOUSE }}
+      run: |
+        flakedrop setup --non-interactive
+
+    - name: Run scheduled drift detection
+      if: github.event_name == 'schedule'
+      run: |
+        # Compare production with all other environments
+        for env in dev staging uat; do
+          echo "Comparing prod → $env"
+          flakedrop compare \
+            --source prod \
+            --target $env \
+            --format markdown \
+            --output drift_prod_to_${env}.md \
+            --exclude "^TEMP_.*" \
+            --exclude ".*_BACKUP$" \
+            --save-version \
+            --version-desc "Automated drift check - ${{ github.run_id }}"
+        done
+
+    - name: Run manual comparison
+      if: github.event_name == 'workflow_dispatch'
+      run: |
+        flakedrop compare \
+          --source ${{ github.event.inputs.source_env }} \
+          --target ${{ github.event.inputs.target_env }} \
+          --format markdown \
+          --output drift_comparison.md \
+          --generate-sync
+
+    - name: Upload drift reports
+      uses: actions/upload-artifact@v3
+      with:
+        name: schema-drift-reports
+        path: |
+          drift_*.md
+          sync_*.sql
+        retention-days: 30
+
+    - name: Check for critical drift
+      id: drift_check
+      run: |
+        # Check if any drift was detected
+        if grep -q "Different Objects: [1-9]" drift_*.md 2>/dev/null; then
+          echo "drift_detected=true" >> $GITHUB_OUTPUT
+          echo "::warning::Schema drift detected between environments"
+        else
+          echo "drift_detected=false" >> $GITHUB_OUTPUT
+          echo "::notice::No schema drift detected"
+        fi
+
+    - name: Create issue for drift
+      if: steps.drift_check.outputs.drift_detected == 'true' && github.event_name == 'schedule'
+      uses: actions/github-script@v6
+      with:
+        script: |
+          const fs = require('fs');
+          
+          // Read drift reports
+          let driftSummary = '## Schema Drift Detection Report\n\n';
+          driftSummary += `Run ID: ${context.runId}\n`;
+          driftSummary += `Date: ${new Date().toISOString()}\n\n`;
+          
+          // Add summary from each report
+          const reports = fs.readdirSync('.').filter(f => f.startsWith('drift_') && f.endsWith('.md'));
+          for (const report of reports) {
+            const content = fs.readFileSync(report, 'utf8');
+            const summary = content.match(/Total differences: \d+.*$/m);
+            if (summary) {
+              driftSummary += `### ${report}\n${summary[0]}\n\n`;
+            }
+          }
+          
+          // Create issue
+          await github.rest.issues.create({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            title: `Schema Drift Detected - ${new Date().toLocaleDateString()}`,
+            body: driftSummary,
+            labels: ['schema-drift', 'automated']
+          });
+
+    - name: Post to Slack
+      if: steps.drift_check.outputs.drift_detected == 'true'
+      uses: 8398a7/action-slack@v3
+      with:
+        status: custom
+        custom_payload: |
+          {
+            text: "Schema Drift Detected",
+            attachments: [{
+              color: "warning",
+              fields: [
+                {
+                  title: "Environments Checked",
+                  value: "${{ github.event_name == 'schedule' && 'prod → dev, staging, uat' || format('{0} → {1}', github.event.inputs.source_env, github.event.inputs.target_env) }}",
+                  short: true
+                },
+                {
+                  title: "Run ID",
+                  value: "${{ github.run_id }}",
+                  short: true
+                },
+                {
+                  title: "Action",
+                  value: "Review drift reports in GitHub Actions artifacts",
+                  short: false
+                }
+              ]
+            }]
+          }
+      env:
+        SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}
+
+  generate-sync-pr:
+    runs-on: ubuntu-latest
+    needs: schema-drift-check
+    if: github.event_name == 'workflow_dispatch' && needs.schema-drift-check.outputs.drift_detected == 'true'
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+
+    - name: Download artifacts
+      uses: actions/download-artifact@v3
+      with:
+        name: schema-drift-reports
+
+    - name: Create sync branch
+      run: |
+        git config user.name "GitHub Actions"
+        git config user.email "actions@github.com"
+        
+        BRANCH_NAME="schema-sync-${{ github.run_id }}"
+        git checkout -b $BRANCH_NAME
+        
+        # Move sync scripts to appropriate directory
+        mkdir -p schema/sync
+        mv sync_*.sql schema/sync/ || true
+        
+        # Commit changes
+        git add schema/sync/
+        git commit -m "Add schema sync scripts from drift detection"
+        git push origin $BRANCH_NAME
+
+    - name: Create pull request
+      uses: actions/github-script@v6
+      with:
+        script: |
+          const branchName = `schema-sync-${context.runId}`;
+          
+          await github.rest.pulls.create({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            title: `Schema Sync: ${context.payload.inputs.source_env} → ${context.payload.inputs.target_env}`,
+            head: branchName,
+            base: 'main',
+            body: `## Schema Synchronization
+            
+            This PR contains the synchronization scripts generated from schema comparison.
+            
+            **Source**: ${context.payload.inputs.source_env}
+            **Target**: ${context.payload.inputs.target_env}
+            
+            Please review the sync scripts carefully before merging.
+            
+            Generated by workflow run: #${context.runId}`
+          });

@@ -1,0 +1,165 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+    tags:
+      - 'v*'
+  pull_request:
+    branches: [ main ]
+
+permissions:
+  contents: write
+  security-events: write
+
+jobs:
+  test:
+    name: Test and Build
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.21'
+
+    - name: Cache Go modules
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/go/pkg/mod
+          ~/.cache/go-build
+          !~/go/pkg/mod/golang.org/toolchain
+        key: ${{ runner.os }}-go-mod-${{ hashFiles('**/go.sum') }}-v2
+        restore-keys: |
+          ${{ runner.os }}-go-mod-
+        enableCrossOsArchive: true
+
+    - name: Install dependencies
+      run: go mod download
+
+    - name: Build FlakeDrop
+      run: |
+        # Build main binary
+        go build -v .
+        
+        # Test that packages compile (excluding examples and test directories)
+        go build -v $(go list ./... | grep -v -E '/(examples|test)/')
+
+    - name: Test basic commands
+      run: |
+        # Build the binary
+        go build -o flakedrop .
+        
+        # Test help command
+        ./flakedrop --help
+        
+        # Test version command
+        ./flakedrop version || true
+        
+        # Test license command
+        ./flakedrop license || true
+        
+        # Test invalid command
+        ./flakedrop invalid-command || true
+
+
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.21'
+
+    - name: Run security scan
+      run: |
+        go install github.com/securego/gosec/v2/cmd/gosec@latest
+        gosec -fmt=sarif -out=security-results.sarif -exclude-dir=examples ./... || true
+
+    - name: Upload SARIF file
+      uses: github/codeql-action/upload-sarif@v3
+      if: always()
+      with:
+        sarif_file: security-results.sarif
+
+  build-release:
+    name: Build Release Binaries
+    runs-on: ubuntu-latest
+    needs: [test]
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/'))
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.21'
+
+    - name: Build all binaries
+      run: |
+        # Create dist directory
+        mkdir -p dist
+        
+        # Get version from tag or use commit hash
+        VERSION=${GITHUB_REF#refs/tags/}
+        if [ "$VERSION" == "$GITHUB_REF" ]; then
+          VERSION="dev-$(git rev-parse --short HEAD)"
+        fi
+        BUILD_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+        
+        # Common build flags
+        LDFLAGS="-s -w -X 'flakedrop/cmd.Version=$VERSION' -X 'flakedrop/cmd.BuildTime=$BUILD_TIME'"
+        
+        # Build for Linux AMD64
+        GOOS=linux GOARCH=amd64 go build -ldflags="$LDFLAGS" -o dist/flakedrop-linux-amd64 .
+        
+        # Build for Linux ARM64
+        GOOS=linux GOARCH=arm64 go build -ldflags="$LDFLAGS" -o dist/flakedrop-linux-arm64 .
+        
+        # Build for macOS AMD64
+        GOOS=darwin GOARCH=amd64 go build -ldflags="$LDFLAGS" -o dist/flakedrop-darwin-amd64 .
+        
+        # Build for macOS ARM64 (Apple Silicon)
+        GOOS=darwin GOARCH=arm64 go build -ldflags="$LDFLAGS" -o dist/flakedrop-darwin-arm64 .
+        
+        # Build for Windows AMD64
+        GOOS=windows GOARCH=amd64 go build -ldflags="$LDFLAGS" -o dist/flakedrop-windows-amd64.exe .
+        
+        # Create checksums
+        cd dist && sha256sum * > checksums.txt
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: release-binaries
+        path: dist/
+        retention-days: 1
+
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    needs: [build-release]
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Download artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: release-binaries
+        path: dist/
+
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        files: dist/*
+        generate_release_notes: true
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
