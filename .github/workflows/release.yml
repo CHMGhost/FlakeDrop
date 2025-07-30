@@ -19,6 +19,7 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: '1.21'
+          cache: false
 
       - name: Build executables
         run: |
@@ -31,18 +32,16 @@ jobs:
           GOOS=linux GOARCH=arm64 go build -ldflags="-s -w" -o build/flakedrop-linux-arm64 main.go
           GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" -o build/flakedrop-windows-amd64.exe main.go
           
-          # Create universal macOS binary
-          lipo -create -output build/flakedrop-darwin build/flakedrop-darwin-amd64 build/flakedrop-darwin-arm64
-          
-          # Create archives
+          # Create archives (separate for each platform)
           cd build
-          tar -czf flakedrop-darwin.tar.gz flakedrop-darwin
+          tar -czf flakedrop-darwin-amd64.tar.gz flakedrop-darwin-amd64
+          tar -czf flakedrop-darwin-arm64.tar.gz flakedrop-darwin-arm64
           tar -czf flakedrop-linux-amd64.tar.gz flakedrop-linux-amd64
           tar -czf flakedrop-linux-arm64.tar.gz flakedrop-linux-arm64
           zip flakedrop-windows-amd64.zip flakedrop-windows-amd64.exe
           
           # Generate checksums
-          shasum -a 256 *.tar.gz *.zip > checksums.txt
+          sha256sum *.tar.gz *.zip > checksums.txt
 
       - name: Create Release
         uses: softprops/action-gh-release@v1
