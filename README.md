@@ -83,18 +83,33 @@ flakedrop rollback deployment <deployment-id>
 Download the appropriate binary for your platform from the [releases page](https://github.com/CHMGhost/FlakeDrop/releases):
 
 ```bash
-# macOS
-curl -L -o flakedrop https://github.com/CHMGhost/FlakeDrop/releases/latest/download/flakedrop-darwin
-chmod +x flakedrop
-sudo mv flakedrop /usr/local/bin/
+# macOS (Intel)
+curl -L -o flakedrop-darwin-amd64.tar.gz https://github.com/CHMGhost/FlakeDrop/releases/latest/download/flakedrop-darwin-amd64.tar.gz
+tar -xzf flakedrop-darwin-amd64.tar.gz
+chmod +x flakedrop-darwin-amd64
+sudo mv flakedrop-darwin-amd64 /usr/local/bin/flakedrop
 
-# Linux
-curl -L -o flakedrop https://github.com/CHMGhost/FlakeDrop/releases/latest/download/flakedrop-linux
-chmod +x flakedrop
-sudo mv flakedrop /usr/local/bin/
+# macOS (Apple Silicon)
+curl -L -o flakedrop-darwin-arm64.tar.gz https://github.com/CHMGhost/FlakeDrop/releases/latest/download/flakedrop-darwin-arm64.tar.gz
+tar -xzf flakedrop-darwin-arm64.tar.gz
+chmod +x flakedrop-darwin-arm64
+sudo mv flakedrop-darwin-arm64 /usr/local/bin/flakedrop
 
-# Windows
-# Download flakedrop-windows.exe and add to your PATH
+# Linux (x64)
+curl -L -o flakedrop-linux-amd64.tar.gz https://github.com/CHMGhost/FlakeDrop/releases/latest/download/flakedrop-linux-amd64.tar.gz
+tar -xzf flakedrop-linux-amd64.tar.gz
+chmod +x flakedrop-linux-amd64
+sudo mv flakedrop-linux-amd64 /usr/local/bin/flakedrop
+
+# Linux (ARM64)
+curl -L -o flakedrop-linux-arm64.tar.gz https://github.com/CHMGhost/FlakeDrop/releases/latest/download/flakedrop-linux-arm64.tar.gz
+tar -xzf flakedrop-linux-arm64.tar.gz
+chmod +x flakedrop-linux-arm64
+sudo mv flakedrop-linux-arm64 /usr/local/bin/flakedrop
+
+# Windows (x64)
+# Download flakedrop-windows-amd64.zip from the releases page
+# Extract and add flakedrop-windows-amd64.exe to your PATH
 ```
 
 ### Building from Source
