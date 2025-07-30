@@ -39,6 +39,14 @@ func init() {
     deployCmd.Flags().BoolVarP(&deployInteractive, "interactive", "i", true, "Use interactive mode for commit selection")
 }
 
+// truncateCommitHash safely truncates commit hash for display
+func truncateCommitHash(hash string, length int) string {
+    if len(hash) <= length {
+        return hash
+    }
+    return hash[:length]
+}
+
 func runDeploy(cmd *cobra.Command, args []string) {
     ctx := context.Background()
     repoName := args[0]
@@ -101,7 +109,7 @@ func runDeploy(cmd *cobra.Command, args []string) {
     if deployCommit != "" {
         // Use provided commit
         selectedCommit = deployCommit
-        ui.ShowInfo(fmt.Sprintf("Using commit: %s", selectedCommit[:7]))
+        ui.ShowInfo(fmt.Sprintf("Using commit: %s", truncateCommitHash(selectedCommit, 7)))
     } else if deployInteractive {
         // Interactive commit selection
         selectedCommit, err = ui.SelectCommit(commits)
@@ -113,7 +121,7 @@ func runDeploy(cmd *cobra.Command, args []string) {
         // Use latest commit
         if len(commits) > 0 {
             selectedCommit = commits[0].Hash
-            ui.ShowInfo(fmt.Sprintf("Using latest commit: %s", selectedCommit[:7]))
+            ui.ShowInfo(fmt.Sprintf("Using latest commit: %s", truncateCommitHash(selectedCommit, 7)))
         }
     }
     

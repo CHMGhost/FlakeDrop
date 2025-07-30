@@ -10,10 +10,18 @@ import (
 )
 
 
+// truncateCommitHash safely truncates commit hash for display
+func truncateCommitHashSelector(hash string, length int) string {
+	if len(hash) <= length {
+		return hash
+	}
+	return hash[:length]
+}
+
 // FormatCommit formats a git commit for display
 func FormatCommit(commit *object.Commit, fileCount int) CommitInfo {
 	hash := commit.Hash.String()
-	shortHash := hash[:7]
+	shortHash := truncateCommitHashSelector(hash, 7)
 	
 	// Truncate long commit messages
 	message := commit.Message

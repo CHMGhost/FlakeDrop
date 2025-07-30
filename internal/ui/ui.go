@@ -298,11 +298,19 @@ func SearchableSelect(message string, options []string) (string, error) {
 	return result, err
 }
 
+// truncateCommitHash safely truncates commit hash for display
+func truncateCommitHash(hash string, length int) string {
+	if len(hash) <= length {
+		return hash
+	}
+	return hash[:length]
+}
+
 // ShowDeploymentSummary displays a deployment summary
 func ShowDeploymentSummary(files []string, commit string) {
 	ShowHeader("Deployment Summary")
 	
-	fmt.Printf("\n%s %s\n", ColorBold("Commit:"), commit[:7])
+	fmt.Printf("\n%s %s\n", ColorBold("Commit:"), truncateCommitHash(commit, 7))
 	fmt.Printf("%s %d files\n\n", ColorBold("Files:"), len(files))
 	
 	if len(files) <= 10 {

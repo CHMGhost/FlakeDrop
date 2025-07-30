@@ -554,10 +554,18 @@ func initializeRollbackServices(appConfig *models.Config) (*rollback.Manager, *s
 	return rollbackManager, snowflakeService, nil
 }
 
+// truncateCommitHash safely truncates commit hash for display
+func truncateCommitHashRollback(hash string, length int) string {
+	if len(hash) <= length {
+		return hash
+	}
+	return hash[:length]
+}
+
 func showDeploymentSummary(deployment *rollback.DeploymentRecord) {
 	fmt.Printf("\n🔄 Deployment %s\n", deployment.ID)
 	fmt.Printf("   Repository: %s\n", deployment.Repository)
-	fmt.Printf("   Commit: %s\n", deployment.Commit[:7])
+	fmt.Printf("   Commit: %s\n", truncateCommitHashRollback(deployment.Commit, 7))
 	fmt.Printf("   Time: %s\n", deployment.StartTime.Format("2006-01-02 15:04:05"))
 	fmt.Printf("   State: %s\n", colorizeState(deployment.State))
 	fmt.Printf("   Files: %d\n", len(deployment.Files))
