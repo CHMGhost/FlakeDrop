@@ -5,11 +5,16 @@ import (
     "fmt"
     "time"
     "crypto/rand"
+    "os"
+    "path/filepath"
 
     "github.com/spf13/cobra"
     "flakedrop/internal/ui"
     "flakedrop/internal/config"
     "flakedrop/internal/plugin"
+    "flakedrop/internal/snowflake"
+    "flakedrop/internal/common"
+    "flakedrop/pkg/models"
     pluginPkg "flakedrop/pkg/plugin"
 )
 
@@ -125,8 +130,12 @@ func runDeploy(cmd *cobra.Command, args []string) {
         }
     }
     
-    // Get files to deploy (simulated)
-    files := getFilesToDeploy(selectedCommit)
+    // Get files to deploy from repository
+    files, err := getRealFilesToDeploy(appConfig, repoName)
+    if err != nil {
+        ui.ShowError(fmt.Errorf("failed to get files: %w", err))
+        return
+    }
     
     // Show deployment summary
     ui.ShowDeploymentSummary(files, selectedCommit)
@@ -142,8 +151,12 @@ func runDeploy(cmd *cobra.Command, args []string) {
         return
     }
     
-    // Execute deployment with plugin integration
-    executeDeployment(ctx, files, deployDryRun, deploymentID, repoName, selectedCommit, pluginService)
+    // Execute real deployment
+    err = executeRealDeployment(ctx, appConfig, files, deployDryRun, deploymentID, repoName, selectedCommit, pluginService)
+    if err != nil {
+        ui.ShowError(err)
+        return
+    }
 }
 
 func getRecentCommits() []ui.CommitInfo {
@@ -403,4 +416,154 @@ func generateDeploymentID() string {
     bytes := make([]byte, 8)
     _, _ = rand.Read(bytes)
     return fmt.Sprintf("deploy-%x", bytes)
+}
+
+// getRealFilesToDeploy gets actual SQL files from the repository  
+func getRealFilesToDeploy(appConfig *models.Config, repoName string) ([]string, error) {
+    // Find the repository configuration
+    var repoConfig *models.Repository
+    for _, repo := range appConfig.Repositories {
+        if repo.Name == repoName {
+            repoConfig = &repo
+            break
+        }
+    }
+    
+    if repoConfig == nil {
+        return nil, fmt.Errorf("repository '%s' not found", repoName)
+    }
+    
+    // Get the repository path
+    repoPath := repoConfig.GitURL
+    if !filepath.IsAbs(repoPath) {
+        wd, _ := os.Getwd()
+        repoPath = filepath.Join(wd, repoPath)
+    }
+    
+    // Look for SQL files in the migrations directory
+    migrationsPath := filepath.Join(repoPath, repoConfig.Path)
+    if _, err := os.Stat(migrationsPath); os.IsNotExist(err) {
+        return nil, fmt.Errorf("migrations directory not found: %s", migrationsPath)
+    }
+    
+    // Read all SQL files from migrations directory
+    files, err := filepath.Glob(filepath.Join(migrationsPath, "*.sql"))
+    if err != nil {
+        return nil, fmt.Errorf("failed to read SQL files: %w", err)
+    }
+    
+    // Convert to relative paths for display
+    var relativeFiles []string
+    for _, file := range files {
+        rel, err := filepath.Rel(repoPath, file)
+        if err != nil {
+            rel = file
+        }
+        relativeFiles = append(relativeFiles, rel)
+    }
+    
+    return relativeFiles, nil
+}
+
+// executeRealDeployment performs actual deployment to Snowflake
+func executeRealDeployment(ctx context.Context, appConfig *models.Config, files []string, dryRun bool, deploymentID, repoName, commit string, pluginService *plugin.Service) error {
+    // Find repository configuration
+    var repoConfig *models.Repository
+    for _, repo := range appConfig.Repositories {
+        if repo.Name == repoName {
+            repoConfig = &repo
+            break
+        }
+    }
+    
+    if repoConfig == nil {
+        return fmt.Errorf("repository '%s' not found", repoName)
+    }
+    
+    // Get repository path
+    repoPath := repoConfig.GitURL
+    if !filepath.IsAbs(repoPath) {
+        wd, _ := os.Getwd()
+        repoPath = filepath.Join(wd, repoPath)
+    }
+    
+    // Create Snowflake service
+    snowflakeConfig := snowflake.Config{
+        Account:   appConfig.Snowflake.Account,
+        Username:  appConfig.Snowflake.Username,
+        Password:  appConfig.Snowflake.Password,
+        Database:  repoConfig.Database,
+        Schema:    repoConfig.Schema,
+        Warehouse: appConfig.Snowflake.Warehouse,
+        Role:      appConfig.Snowflake.Role,
+        Timeout:   30 * time.Second,
+    }
+    
+    snowflakeService := snowflake.NewService(snowflakeConfig)
+    if !dryRun {
+        if err := snowflakeService.Connect(); err != nil {
+            return fmt.Errorf("failed to connect to Snowflake: %w", err)
+        }
+        defer snowflakeService.Close()
+    }
+    
+    pb := ui.NewProgressBar(len(files))
+    successCount := 0
+    failureCount := 0
+    
+    // Execute each file
+    for i, file := range files {
+        ui.ShowFileExecution(file, i+1, len(files))
+        
+        // Get full file path
+        fullPath := filepath.Join(repoPath, file)
+        
+        // Validate file path
+        validatedPath, err := common.ValidatePath(fullPath, repoPath)
+        if err != nil {
+            ui.ShowError(fmt.Errorf("invalid file path %s: %w", file, err))
+            failureCount++
+            pb.Update(i+1, file, false)
+            continue
+        }
+        
+        if dryRun {
+            // In dry run, just validate the file exists and is readable
+            content, err := os.ReadFile(validatedPath)
+            if err != nil {
+                ui.ShowError(fmt.Errorf("failed to read %s: %w", file, err))
+                failureCount++
+            } else {
+                ui.ShowSuccess(fmt.Sprintf("✓ Would execute %d bytes of SQL", len(content)))
+                successCount++
+            }
+        } else {
+            // Execute SQL file
+            start := time.Now()
+            err := snowflakeService.ExecuteFile(validatedPath, repoConfig.Database, repoConfig.Schema)
+            duration := time.Since(start)
+            
+            if err != nil {
+                ui.ShowError(fmt.Errorf("failed to execute %s: %w", file, err))
+                failureCount++
+            } else {
+                ui.ShowSuccess(fmt.Sprintf("✓ Success (%s)", formatDuration(duration)))
+                successCount++
+            }
+        }
+        
+        pb.Update(i+1, file, err == nil)
+    }
+    
+    pb.Finish()
+    
+    // Show final results
+    fmt.Println()
+    if failureCount == 0 {
+        ui.ShowSuccess(fmt.Sprintf("✅ Deployment completed successfully! %d files deployed.", successCount))
+    } else {
+        ui.ShowError(fmt.Errorf("⚠️ Deployment completed with errors: %d succeeded, %d failed", successCount, failureCount))
+    }
+    
+    return nil
 }
