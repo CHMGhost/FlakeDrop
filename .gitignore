@@ -64,3 +64,9 @@ test_ui
 update_to_flakedrop.sh
 update_app_name_only.sh
 final_app_name_update.sh
+
+# Test environment directory
+test-env/
+
+# Flakedrop configuration and data directory
+.flakedrop/

@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
 	"time"
 
@@ -537,7 +538,7 @@ func initializeRollbackServices(appConfig *models.Config) (*rollback.Manager, *s
 	
 	// Create rollback manager
 	rollbackConfig := &rollback.Config{
-		StorageDir:         filepath.Join(".", ".flakedrop", "rollback"),
+		StorageDir:         filepath.Join(os.Getenv("HOME"), ".flakedrop", "rollback"),
 		EnableAutoSnapshot: true,
 		SnapshotRetention:  30 * 24 * time.Hour,
 		BackupRetention:    90 * 24 * time.Hour,

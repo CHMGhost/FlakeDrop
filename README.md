@@ -13,8 +13,8 @@ A powerful platform for deploying SQL changes from Git repositories to Snowflake
 - **Multi-Platform Support**: Works seamlessly on macOS, Linux, and Windows
 - **License Management**: Built-in license key validation and management
 - **CI/CD Ready**: Non-interactive mode for automated deployments
-- **Comprehensive Rollback**: Automated rollback with transaction support and point-in-time recovery
-- **Disaster Recovery**: Schema snapshots, backup/restore, and recovery strategies
+- **Automated Rollback**: Automatic rollback of failed deployments with configurable strategies
+- **Disaster Recovery**: Schema snapshots, backup/restore, and point-in-time recovery
 - **Deployment History**: Full audit trail with versioning and history tracking
 - **Schema Comparison**: Compare schemas between environments with drift detection
 - **Synchronization Scripts**: Generate SQL scripts to synchronize schema differences
@@ -63,7 +63,7 @@ flakedrop setup
 # Add a repository
 flakedrop repo add
 
-# Deploy changes
+# Deploy changes (with automatic rollback on failure)
 flakedrop deploy analytics
 
 # Compare schemas between environments
@@ -72,8 +72,11 @@ flakedrop compare --source dev --target prod
 # View deployment history
 flakedrop rollback list
 
-# Rollback if needed
+# Manual rollback if needed
 flakedrop rollback deployment <deployment-id>
+
+# Create a backup
+flakedrop rollback backup --database ANALYTICS_DB --schema PUBLIC
 ```
 
 ## Installation
@@ -180,6 +183,33 @@ flakedrop repo add
 flakedrop repo remove analytics
 ```
 
+### Rollback and Recovery
+
+FlakeDrop v1.2.0 introduces comprehensive rollback functionality:
+
+```bash
+# View deployment history
+flakedrop rollback list
+
+# Rollback a specific deployment
+flakedrop rollback deployment <deployment-id>
+
+# Create a manual backup
+flakedrop rollback backup --database ANALYTICS_DB --schema PUBLIC
+
+# Restore from a backup
+flakedrop rollback restore <backup-id>
+
+# Validate rollback capability
+flakedrop rollback validate <deployment-id>
+```
+
+**Automatic Rollback**: When enabled in configuration, FlakeDrop automatically rolls back failed deployments:
+- Creates pre-deployment snapshots
+- Tracks all schema changes
+- Automatically reverts changes on failure
+- Maintains full audit trail
+
 ### License Management
 
 ```bash
@@ -208,6 +238,13 @@ repositories:
     branch: "main"
     database: "ANALYTICS_DB"
     schema: "PUBLIC"
+
+deployment:
+  rollback:
+    enabled: true                    # Enable rollback functionality
+    on_failure: true                # Automatically rollback on deployment failure
+    backup_retention: 7             # Days to retain backups
+    strategy: "snapshot"            # Rollback strategy: snapshot, incremental, or transaction
 
 license:
   key: "XXXX-XXXX-XXXX-XXXX"

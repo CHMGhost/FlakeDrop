@@ -189,7 +189,7 @@ func (s *Service) GetProcedureDetails(ctx context.Context, database, schema, pro
 	// Get procedure definition using SHOW PROCEDURES
 	query := fmt.Sprintf("SHOW PROCEDURES LIKE '%s' IN SCHEMA %s.%s", procedure, database, schema)
 	
-	rows, err := s.snowflake.ExecuteQuery(query)
+	rows, err := s.snowflake.ExecuteQueryContext(ctx, query)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get procedure details: %w", err)
 	}
@@ -269,7 +269,7 @@ func (s *Service) shouldIncludeType(objType ObjectType, types []ObjectType) bool
 func (s *Service) getTables(ctx context.Context, database, schema string) ([]SchemaObject, error) {
 	query := fmt.Sprintf("SHOW TABLES IN SCHEMA %s.%s", database, schema)
 	
-	rows, err := s.snowflake.ExecuteQuery(query)
+	rows, err := s.snowflake.ExecuteQueryContext(ctx, query)
 	if err != nil {
 		return nil, err
 	}
@@ -330,7 +330,7 @@ func (s *Service) getTables(ctx context.Context, database, schema string) ([]Sch
 func (s *Service) getViews(ctx context.Context, database, schema string) ([]SchemaObject, error) {
 	query := fmt.Sprintf("SHOW VIEWS IN SCHEMA %s.%s", database, schema)
 	
-	rows, err := s.snowflake.ExecuteQuery(query)
+	rows, err := s.snowflake.ExecuteQueryContext(ctx, query)
 	if err != nil {
 		return nil, err
 	}
@@ -390,7 +390,7 @@ func (s *Service) getViews(ctx context.Context, database, schema string) ([]Sche
 func (s *Service) getProcedures(ctx context.Context, database, schema string) ([]SchemaObject, error) {
 	query := fmt.Sprintf("SHOW PROCEDURES IN SCHEMA %s.%s", database, schema)
 	
-	rows, err := s.snowflake.ExecuteQuery(query)
+	rows, err := s.snowflake.ExecuteQueryContext(ctx, query)
 	if err != nil {
 		return nil, err
 	}
@@ -446,7 +446,7 @@ func (s *Service) getProcedures(ctx context.Context, database, schema string) ([
 func (s *Service) getFunctions(ctx context.Context, database, schema string) ([]SchemaObject, error) {
 	query := fmt.Sprintf("SHOW FUNCTIONS IN SCHEMA %s.%s", database, schema)
 	
-	rows, err := s.snowflake.ExecuteQuery(query)
+	rows, err := s.snowflake.ExecuteQueryContext(ctx, query)
 	if err != nil {
 		return nil, err
 	}
@@ -502,7 +502,7 @@ func (s *Service) getFunctions(ctx context.Context, database, schema string) ([]
 func (s *Service) getSequences(ctx context.Context, database, schema string) ([]SchemaObject, error) {
 	query := fmt.Sprintf("SHOW SEQUENCES IN SCHEMA %s.%s", database, schema)
 	
-	rows, err := s.snowflake.ExecuteQuery(query)
+	rows, err := s.snowflake.ExecuteQueryContext(ctx, query)
 	if err != nil {
 		return nil, err
 	}
@@ -562,7 +562,7 @@ func (s *Service) getSequences(ctx context.Context, database, schema string) ([]
 func (s *Service) getStages(ctx context.Context, database, schema string) ([]SchemaObject, error) {
 	query := fmt.Sprintf("SHOW STAGES IN SCHEMA %s.%s", database, schema)
 	
-	rows, err := s.snowflake.ExecuteQuery(query)
+	rows, err := s.snowflake.ExecuteQueryContext(ctx, query)
 	if err != nil {
 		return nil, err
 	}
@@ -622,7 +622,7 @@ func (s *Service) getStages(ctx context.Context, database, schema string) ([]Sch
 func (s *Service) getFileFormats(ctx context.Context, database, schema string) ([]SchemaObject, error) {
 	query := fmt.Sprintf("SHOW FILE FORMATS IN SCHEMA %s.%s", database, schema)
 	
-	rows, err := s.snowflake.ExecuteQuery(query)
+	rows, err := s.snowflake.ExecuteQueryContext(ctx, query)
 	if err != nil {
 		return nil, err
 	}
@@ -682,7 +682,7 @@ func (s *Service) getFileFormats(ctx context.Context, database, schema string) (
 func (s *Service) getTableInfo(ctx context.Context, database, schema, table string) (*SchemaObject, error) {
 	query := fmt.Sprintf("SHOW TABLES LIKE '%s' IN SCHEMA %s.%s", table, database, schema)
 	
-	rows, err := s.snowflake.ExecuteQuery(query)
+	rows, err := s.snowflake.ExecuteQueryContext(ctx, query)
 	if err != nil {
 		return nil, err
 	}
@@ -738,7 +738,7 @@ func (s *Service) getTableInfo(ctx context.Context, database, schema, table stri
 func (s *Service) getTableColumns(ctx context.Context, database, schema, table string) ([]Column, error) {
 	query := fmt.Sprintf("DESCRIBE TABLE %s.%s.%s", database, schema, table)
 	
-	rows, err := s.snowflake.ExecuteQuery(query)
+	rows, err := s.snowflake.ExecuteQueryContext(ctx, query)
 	if err != nil {
 		return nil, err
 	}
@@ -815,7 +815,7 @@ func (s *Service) getTableColumns(ctx context.Context, database, schema, table s
 func (s *Service) getTableConstraints(ctx context.Context, database, schema, table string) ([]Constraint, error) {
 	query := fmt.Sprintf("SHOW PRIMARY KEYS IN TABLE %s.%s.%s", database, schema, table)
 	
-	rows, err := s.snowflake.ExecuteQuery(query)
+	rows, err := s.snowflake.ExecuteQueryContext(ctx, query)
 	if err != nil {
 		// If error, return empty constraints list
 		return []Constraint{}, nil
@@ -883,7 +883,7 @@ func (s *Service) getTableIndexes(ctx context.Context, database, schema, table s
 	// Snowflake doesn't have traditional indexes, but we can get clustering keys
 	query := fmt.Sprintf("SHOW TABLES LIKE '%s' IN SCHEMA %s.%s", table, database, schema)
 	
-	rows, err := s.snowflake.ExecuteQuery(query)
+	rows, err := s.snowflake.ExecuteQueryContext(ctx, query)
 	if err != nil {
 		return nil, err
 	}

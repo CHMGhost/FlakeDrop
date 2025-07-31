@@ -55,7 +55,8 @@ func (s *Service) Connect() error {
 	// Use circuit breaker for connection attempts
 	return s.circuitBreaker.Execute(context.Background(), func() error {
 		return errors.RetryWithBackoff(context.Background(), func(ctx context.Context) error {
-			dsn := fmt.Sprintf("%s:%s@%s/%s/%s?warehouse=%s&role=%s",
+			// Enable multi-statement execution
+			dsn := fmt.Sprintf("%s:%s@%s/%s/%s?warehouse=%s&role=%s&multiStatements=true",
 				s.config.Username,
 				s.config.Password,
 				s.config.Account,
@@ -152,79 +153,70 @@ func (s *Service) ExecuteSQL(sql, database, schema string) error {
 	ctx, cancel := s.getContext()
 	defer cancel()
 
-	// Start a transaction for multiple statements
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return errors.Wrap(err, errors.ErrCodeSQLTransaction, "Failed to begin transaction")
+	// Always use individual statement execution for reliability
+	return s.executeStatementsIndividually(ctx, sql, database, schema)
+}
+
+// executeStatementsIndividually executes statements one by one as a fallback
+func (s *Service) executeStatementsIndividually(ctx context.Context, sql, database, schema string) error {
+	// First, set the database and schema context
+	if _, err := s.db.ExecContext(ctx, fmt.Sprintf("USE DATABASE %s", database)); err != nil {
+		return errors.SQLError(
+			fmt.Sprintf("Failed to use database %s", database),
+			fmt.Sprintf("USE DATABASE %s", database),
+			err,
+		).WithContext("database", database)
 	}
 
-	// Create transaction handler for automatic rollback
-	txHandler := s.errorHandler.NewTransactionHandler(tx, tx.Rollback)
+	if _, err := s.db.ExecContext(ctx, fmt.Sprintf("USE SCHEMA %s", schema)); err != nil {
+		return errors.SQLError(
+			fmt.Sprintf("Failed to use schema %s", schema),
+			fmt.Sprintf("USE SCHEMA %s", schema),
+			err,
+		).WithContext("schema", schema)
+	}
 
-	return txHandler.Execute(func() error {
-		// Switch to the specified database and schema
-		if _, err := tx.ExecContext(ctx, fmt.Sprintf("USE DATABASE %s", database)); err != nil {
-			return errors.SQLError(
-				fmt.Sprintf("Failed to use database %s", database),
-				fmt.Sprintf("USE DATABASE %s", database),
-				err,
-			).WithContext("database", database)
+	// Split SQL into individual statements
+	statements := s.splitStatements(sql)
+	
+	// Execute each statement individually
+	for i, stmt := range statements {
+		stmt = strings.TrimSpace(stmt)
+		if stmt == "" {
+			continue
 		}
 
-		if _, err := tx.ExecContext(ctx, fmt.Sprintf("USE SCHEMA %s", schema)); err != nil {
-			return errors.SQLError(
-				fmt.Sprintf("Failed to use schema %s", schema),
-				fmt.Sprintf("USE SCHEMA %s", schema),
+		// Execute statement
+		if _, err := s.db.ExecContext(ctx, stmt); err != nil {
+			sqlErr := errors.SQLError(
+				fmt.Sprintf("Failed to execute statement %d", i+1),
+				stmt,
 				err,
-			).WithContext("schema", schema)
-		}
+			).WithContext("statement_index", i+1).
+				WithContext("total_statements", len(statements))
 
-		// Split SQL into individual statements
-		statements := s.splitStatements(sql)
-
-		for i, stmt := range statements {
-			stmt = strings.TrimSpace(stmt)
-			if stmt == "" {
-				continue
+			// Check for specific SQL errors
+			errStr := err.Error()
+			if strings.Contains(errStr, "does not exist") || strings.Contains(errStr, "not found") {
+				sqlErr.Code = errors.ErrCodeSQLObjectNotFound
+				sqlErr.WithSuggestions(
+					"Verify the object exists in the target database/schema",
+					"Check for typos in object names",
+					"Ensure you have the correct permissions",
+				)
+			} else if strings.Contains(errStr, "syntax error") {
+				sqlErr.WithSuggestions(
+					"Check SQL syntax near the error location",
+					"Verify Snowflake-specific syntax requirements",
+					"Use the Snowflake documentation for syntax reference",
+				)
 			}
 
-			// Execute statement
-			if _, err := tx.ExecContext(ctx, stmt); err != nil {
-				sqlErr := errors.SQLError(
-					fmt.Sprintf("Failed to execute statement %d", i+1),
-					stmt,
-					err,
-				).WithContext("statement_index", i+1).
-					WithContext("total_statements", len(statements))
-
-				// Check for specific SQL errors
-				errStr := err.Error()
-				if strings.Contains(errStr, "does not exist") || strings.Contains(errStr, "not found") {
-					sqlErr.Code = errors.ErrCodeSQLObjectNotFound
-					sqlErr.WithSuggestions(
-						"Verify the object exists in the target database/schema",
-						"Check for typos in object names",
-						"Ensure you have the correct permissions",
-					)
-				} else if strings.Contains(errStr, "syntax error") {
-					sqlErr.WithSuggestions(
-						"Check SQL syntax near the error location",
-						"Verify Snowflake-specific syntax requirements",
-						"Use the Snowflake documentation for syntax reference",
-					)
-				}
-
-				return sqlErr
-			}
+			return sqlErr
 		}
+	}
 
-		// Commit the transaction
-		if err := tx.Commit(); err != nil {
-			return errors.Wrap(err, errors.ErrCodeSQLTransaction, "Failed to commit transaction")
-		}
-
-		return nil
-	})
+	return nil
 }
 
 // ExecuteQuery executes a query and returns results
@@ -236,6 +228,14 @@ func (s *Service) ExecuteQuery(query string) (*sql.Rows, error) {
 	ctx, cancel := s.getContext()
 	defer cancel()
 
+	return s.db.QueryContext(ctx, query)
+}
+
+// ExecuteQueryContext executes a query with the provided context
+func (s *Service) ExecuteQueryContext(ctx context.Context, query string) (*sql.Rows, error) {
+	if !s.connected {
+		return nil, fmt.Errorf("not connected to database")
+	}
 	return s.db.QueryContext(ctx, query)
 }
 
@@ -382,38 +382,72 @@ func (s *Service) useSchema(ctx context.Context, schema string) error {
 }
 
 func (s *Service) splitStatements(sql string) []string {
-	// Simple statement splitter - splits on semicolons not within strings
+	// For Snowflake, we need to be more careful about statement splitting
+	// Since it counts multi-line statements as multiple statements,
+	// we'll use a different approach
+	
+	// First, normalize line endings
+	sql = strings.ReplaceAll(sql, "\r\n", "\n")
+	
+	// Remove comments to avoid confusion
+	lines := strings.Split(sql, "\n")
+	var cleanedLines []string
+	for _, line := range lines {
+		// Remove line comments
+		if idx := strings.Index(line, "--"); idx >= 0 {
+			line = line[:idx]
+		}
+		cleanedLines = append(cleanedLines, line)
+	}
+	sql = strings.Join(cleanedLines, "\n")
+	
+	// Now split by semicolon, handling strings properly
 	var statements []string
 	var current strings.Builder
 	inString := false
 	stringChar := rune(0)
-
-	for i, char := range sql {
+	
+	runes := []rune(sql)
+	for i := 0; i < len(runes); i++ {
+		char := runes[i]
+		
 		if !inString {
 			if char == '\'' || char == '"' {
 				inString = true
 				stringChar = char
+				current.WriteRune(char)
 			} else if char == ';' {
-				// Check if it's not escaped
-				if i == 0 || sql[i-1] != '\\' {
-					statements = append(statements, current.String())
-					current.Reset()
-					continue
+				// Found statement terminator
+				stmt := strings.TrimSpace(current.String())
+				if stmt != "" {
+					statements = append(statements, stmt)
 				}
+				current.Reset()
+			} else {
+				current.WriteRune(char)
 			}
 		} else {
-			if char == stringChar && (i == 0 || sql[i-1] != '\\') {
-				inString = false
+			current.WriteRune(char)
+			if char == stringChar {
+				// Check if it's escaped
+				if i+1 < len(runes) && runes[i+1] == stringChar {
+					// Double quote - skip next
+					current.WriteRune(runes[i+1])
+					i++
+				} else {
+					// End of string
+					inString = false
+				}
 			}
 		}
-		current.WriteRune(char)
 	}
-
+	
 	// Add the last statement if any
-	if current.Len() > 0 {
-		statements = append(statements, current.String())
+	stmt := strings.TrimSpace(current.String())
+	if stmt != "" {
+		statements = append(statements, stmt)
 	}
-
+	
 	return statements
 }
 

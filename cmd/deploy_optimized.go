@@ -3,13 +3,13 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
 	"flakedrop/internal/config"
-	"flakedrop/internal/git"
 	"flakedrop/internal/performance"
 	"flakedrop/internal/snowflake"
 	"flakedrop/internal/ui"
@@ -76,7 +76,7 @@ func runOptimizedDeploy(cmd *cobra.Command, args []string) error {
 	ctx := context.Background()
 
 	// Show header
-	ui.ShowHeader(fmt.Sprintf("Snowflake Deploy (Optimized) - Repository: %s", repoName))
+	ui.ShowHeader(fmt.Sprintf("FlakeDrop (Optimized) - Repository: %s", repoName))
 
 	// Load configuration
 	cfg, err := config.Load()
@@ -157,13 +157,12 @@ func runOptimizedDeploy(cmd *cobra.Command, args []string) error {
 		return runBenchmark(ctx, service)
 	}
 
-	// Get commits (placeholder implementation)
-	var commits []git.CommitInfo
-	// TODO: Implement proper commit retrieval
-	commits = []git.CommitInfo{
-		{Hash: "abc123", Message: "Test commit", Author: "Demo", Date: time.Now()},
+	// Get commits from getRealCommits function
+	uiCommits, err := getRealCommits(cfg, repoName)
+	if err != nil {
+		return errors.Wrap(err, errors.ErrCodeGit, "Failed to get commits")
 	}
-	if len(commits) == 0 {
+	if len(uiCommits) == 0 {
 		return errors.New(errors.ErrCodeGit, "No commits found")
 	}
 
@@ -171,27 +170,38 @@ func runOptimizedDeploy(cmd *cobra.Command, args []string) error {
 	var selectedCommit string
 	if deployCommit != "" {
 		selectedCommit = deployCommit
-		ui.ShowInfo(fmt.Sprintf("Using specified commit: %s", selectedCommit[:7]))
+		displayCommit := selectedCommit
+		if len(selectedCommit) > 7 {
+			displayCommit = selectedCommit[:7]
+		}
+		ui.ShowInfo(fmt.Sprintf("Using specified commit: %s", displayCommit))
 	} else if deployInteractive && !deployDryRun {
-		selectedCommit, err = ui.SelectCommit(convertCommits(commits))
+		selectedCommit, err = ui.SelectCommit(uiCommits)
 		if err != nil {
 			return errors.Wrap(err, errors.ErrCodeUserInput, "Failed to select commit")
 		}
-	} else if len(commits) > 0 {
-		selectedCommit = commits[0].Hash
-		ui.ShowInfo(fmt.Sprintf("Using latest commit: %s", selectedCommit[:7]))
+	} else if len(uiCommits) > 0 {
+		selectedCommit = uiCommits[0].Hash
+		displayCommit := selectedCommit
+		if len(selectedCommit) > 7 {
+			displayCommit = selectedCommit[:7]
+		}
+		ui.ShowInfo(fmt.Sprintf("Using latest commit: %s", displayCommit))
 	} else {
 		return errors.New(errors.ErrCodeGit, "No commits found")
 	}
 
-	// Get files to deploy (placeholder implementation)
-	files := []string{"demo.sql", "schema.sql"} // TODO: Implement proper file retrieval
+	// Get real files from repository
+	files, err := getRealFilesToDeploy(cfg, repoName)
+	if err != nil {
+		return errors.Wrap(err, errors.ErrCodeRepoAccessDenied, "Failed to get files")
+	}
 
 	// Filter SQL files
 	var sqlFiles []string
 	for _, file := range files {
 		if strings.HasSuffix(strings.ToLower(file), ".sql") {
-			sqlFiles = append(sqlFiles, filepath.Join(repoConfig.Path, file))
+			sqlFiles = append(sqlFiles, file)
 		}
 	}
 
@@ -217,11 +227,22 @@ func runOptimizedDeploy(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
+	// Build full paths for deployment
+	fullPaths := make([]string, len(sqlFiles))
+	repoPath := repoConfig.GitURL
+	if !filepath.IsAbs(repoPath) {
+		wd, _ := os.Getwd()
+		repoPath = filepath.Join(wd, repoPath)
+	}
+	for i, file := range sqlFiles {
+		fullPaths[i] = filepath.Join(repoPath, file)
+	}
+	
 	// Start deployment with progress tracking
 	ui.ShowHeader("Starting Optimized Deployment")
 	
 	startTime := time.Now()
-	deploymentErr := deployWithProgress(ctx, service, sqlFiles, repoConfig.Database, repoConfig.Schema)
+	deploymentErr := deployWithProgress(ctx, service, fullPaths, repoConfig.Database, repoConfig.Schema)
 	duration := time.Since(startTime)
 
 	// Show results
@@ -396,20 +417,6 @@ func runBenchmark(ctx context.Context, service *performance.OptimizedService) er
 	return nil
 }
 
-func convertCommits(gitCommits []git.CommitInfo) []ui.CommitInfo {
-	commits := make([]ui.CommitInfo, len(gitCommits))
-	for i, gc := range gitCommits {
-		commits[i] = ui.CommitInfo{
-			Hash:      gc.Hash,
-			ShortHash: gc.Hash[:7],
-			Message:   gc.Message,
-			Author:    gc.Author,
-			Time:      gc.Date,
-			Files:     0, // TODO: Get actual file count from git manager
-		}
-	}
-	return commits
-}
 
 func parseSize(s string) (int64, error) {
 	s = strings.ToUpper(strings.TrimSpace(s))

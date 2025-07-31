@@ -6,13 +6,17 @@ import (
     "time"
     "crypto/rand"
     "os"
+    "os/exec"
     "path/filepath"
+    "strconv"
+    "strings"
 
     "github.com/spf13/cobra"
     "flakedrop/internal/ui"
     "flakedrop/internal/config"
     "flakedrop/internal/plugin"
     "flakedrop/internal/snowflake"
+    "flakedrop/internal/rollback"
     "flakedrop/internal/common"
     "flakedrop/pkg/models"
     pluginPkg "flakedrop/pkg/plugin"
@@ -100,14 +104,15 @@ func runDeploy(cmd *cobra.Command, args []string) {
         }
     }
     
-    // Connect to Snowflake (simulated)
-    spinner := ui.NewSpinner("Connecting to Snowflake...")
-    spinner.Start()
-    time.Sleep(2 * time.Second)
-    spinner.Stop(true, "Connected to Snowflake")
+    // Note: Actual Snowflake connection happens in executeRealDeployment
+    ui.ShowInfo("Preparing deployment...")
     
-    // Get commits (simulated for demo)
-    commits := getRecentCommits()
+    // Get real commits from git repository
+    commits, err := getRealCommits(appConfig, repoName)
+    if err != nil {
+        ui.ShowError(fmt.Errorf("failed to get commits: %w", err))
+        return
+    }
     
     var selectedCommit string
     
@@ -159,250 +164,87 @@ func runDeploy(cmd *cobra.Command, args []string) {
     }
 }
 
-func getRecentCommits() []ui.CommitInfo {
-    // Simulated commits for demo
-    return []ui.CommitInfo{
-        {
-            Hash:      "abc123456789def0123456789abcdef0123456789",
-            ShortHash: "abc1234",
-            Message:   "Fix database connection pooling issue",
-            Author:    "John Doe",
-            Time:      time.Now().Add(-2 * time.Hour),
-            Files:     5,
-        },
-        {
-            Hash:      "def456789012ghi3456789012def456789012ghi3",
-            ShortHash: "def4567",
-            Message:   "Add new customer analytics tables",
-            Author:    "Jane Smith",
-            Time:      time.Now().Add(-5 * time.Hour),
-            Files:     12,
-        },
-        {
-            Hash:      "ghi789012345jkl6789012345ghi789012345jkl6",
-            ShortHash: "ghi7890",
-            Message:   "Update schema for performance optimization",
-            Author:    "Bob Johnson",
-            Time:      time.Now().Add(-24 * time.Hour),
-            Files:     3,
-        },
-        {
-            Hash:      "jkl012345678mno9012345678jkl012345678mno9",
-            ShortHash: "jkl0123",
-            Message:   "Refactor stored procedures for better maintainability",
-            Author:    "Alice Wilson",
-            Time:      time.Now().Add(-48 * time.Hour),
-            Files:     8,
-        },
+// getRealCommits fetches actual commits from the git repository
+func getRealCommits(appConfig *models.Config, repoName string) ([]ui.CommitInfo, error) {
+    // Find repository configuration
+    var repoConfig *models.Repository
+    for _, repo := range appConfig.Repositories {
+        if repo.Name == repoName {
+            repoConfig = &repo
+            break
+        }
     }
+    
+    if repoConfig == nil {
+        return nil, fmt.Errorf("repository '%s' not found", repoName)
+    }
+    
+    // Get repository path
+    repoPath := repoConfig.GitURL
+    if !filepath.IsAbs(repoPath) {
+        wd, _ := os.Getwd()
+        repoPath = filepath.Join(wd, repoPath)
+    }
+    
+    // Change to repository directory
+    originalDir, err := os.Getwd()
+    if err != nil {
+        return nil, fmt.Errorf("failed to get current directory: %w", err)
+    }
+    
+    if err := os.Chdir(repoPath); err != nil {
+        return nil, fmt.Errorf("failed to change to repository directory: %w", err)
+    }
+    defer os.Chdir(originalDir)
+    
+    // Get recent commits using git log
+    cmd := exec.Command("git", "log", "--pretty=format:%H|%h|%s|%an|%at", "-n", "10")
+    output, err := cmd.Output()
+    if err != nil {
+        return nil, fmt.Errorf("failed to get git commits: %w", err)
+    }
+    
+    var commits []ui.CommitInfo
+    lines := strings.Split(string(output), "\n")
+    
+    for _, line := range lines {
+        if line == "" {
+            continue
+        }
+        
+        parts := strings.Split(line, "|")
+        if len(parts) < 5 {
+            continue
+        }
+        
+        timestamp, _ := strconv.ParseInt(parts[4], 10, 64)
+        
+        commits = append(commits, ui.CommitInfo{
+            Hash:      parts[0],
+            ShortHash: parts[1],
+            Message:   parts[2],
+            Author:    parts[3],
+            Time:      time.Unix(timestamp, 0),
+            Files:     0, // We can get this with additional git commands if needed
+        })
+    }
+    
+    // If no commits found, add HEAD as fallback
+    if len(commits) == 0 {
+        commits = append(commits, ui.CommitInfo{
+            Hash:      "HEAD",
+            ShortHash: "HEAD",
+            Message:   "Current HEAD",
+            Author:    "Unknown",
+            Time:      time.Now(),
+            Files:     0,
+        })
+    }
+    
+    return commits, nil
 }
 
-func getFilesToDeploy(commit string) []string {
-    // Simulated files for demo
-    return []string{
-        "tables/users.sql",
-        "tables/orders.sql",
-        "tables/products.sql",
-        "views/customer_analytics.sql",
-        "views/revenue_summary.sql",
-        "procedures/update_stats.sql",
-        "functions/calculate_revenue.sql",
-    }
-}
 
-func executeDeployment(ctx context.Context, files []string, dryRun bool, deploymentID, repoName, commit string, pluginService *plugin.Service) {
-    pb := ui.NewProgressBar(len(files))
-    
-    successCount := 0
-    failureCount := 0
-    deploymentStart := time.Now()
-    
-    // Execute pre-deploy hooks
-    if pluginService != nil {
-        hookData := pluginPkg.HookData{
-            DeploymentID: deploymentID,
-            Repository:   repoName,
-            Commit:       commit,
-            Files:        files,
-            StartTime:    deploymentStart,
-            Success:      true,
-            Metadata:     map[string]interface{}{
-                "dry_run": dryRun,
-            },
-        }
-        
-        if err := pluginService.ExecuteHook(ctx, pluginPkg.HookPreDeploy, hookData); err != nil {
-            ui.ShowWarning(fmt.Sprintf("Pre-deploy hook warning: %v", err))
-        }
-    }
-    
-    for i, file := range files {
-        ui.ShowFileExecution(file, i+1, len(files))
-        
-        // Execute pre-file hooks
-        if pluginService != nil {
-            hookData := pluginPkg.HookData{
-                DeploymentID: deploymentID,
-                Repository:   repoName,
-                Commit:       commit,
-                Files:        files,
-                CurrentFile:  file,
-                StartTime:    time.Now(),
-                Success:      true,
-                Metadata:     map[string]interface{}{
-                    "dry_run": dryRun,
-                    "file_index": i + 1,
-                    "total_files": len(files),
-                },
-            }
-            
-            if err := pluginService.ExecuteHook(ctx, pluginPkg.HookPreFile, hookData); err != nil {
-                ui.ShowWarning(fmt.Sprintf("Pre-file hook warning for %s: %v", file, err))
-            }
-        }
-        
-        var success bool
-        var errorMsg string
-        var duration time.Duration
-        
-        if dryRun {
-            time.Sleep(500 * time.Millisecond)
-            ui.ShowExecutionResult(file, true, "", "skipped")
-            success = true
-            successCount++
-        } else {
-            // Simulate execution
-            start := time.Now()
-            time.Sleep(1 * time.Second)
-            
-            // Simulate random failure for demo
-            success = i != 2 // Third file fails
-            duration = time.Since(start)
-            
-            if success {
-                ui.ShowExecutionResult(file, true, "", formatDuration(duration))
-                successCount++
-            } else {
-                errorMsg = "Syntax error at line 42"
-                ui.ShowExecutionResult(file, false, errorMsg, "")
-                failureCount++
-            }
-        }
-        
-        pb.Update(i+1, file, success)
-        
-        // Execute post-file hooks
-        if pluginService != nil {
-            hookData := pluginPkg.HookData{
-                DeploymentID: deploymentID,
-                Repository:   repoName,
-                Commit:       commit,
-                Files:        files,
-                CurrentFile:  file,
-                StartTime:    time.Now(),
-                Duration:     duration,
-                Success:      success,
-                Metadata:     map[string]interface{}{
-                    "dry_run": dryRun,
-                    "file_index": i + 1,
-                    "total_files": len(files),
-                },
-            }
-            
-            if !success && errorMsg != "" {
-                hookData.Error = fmt.Errorf("%s", errorMsg)
-            }
-            
-            if err := pluginService.ExecuteHook(ctx, pluginPkg.HookPostFile, hookData); err != nil {
-                ui.ShowWarning(fmt.Sprintf("Post-file hook warning for %s: %v", file, err))
-            }
-        }
-    }
-    
-    pb.Finish()
-    
-    deploymentEnd := time.Now()
-    deploymentDuration := deploymentEnd.Sub(deploymentStart)
-    deploymentSuccess := failureCount == 0
-    
-    // Execute post-deploy hooks
-    if pluginService != nil {
-        hookData := pluginPkg.HookData{
-            DeploymentID: deploymentID,
-            Repository:   repoName,
-            Commit:       commit,
-            Files:        files,
-            StartTime:    deploymentStart,
-            EndTime:      deploymentEnd,
-            Duration:     deploymentDuration,
-            Success:      deploymentSuccess,
-            Metadata:     map[string]interface{}{
-                "dry_run": dryRun,
-                "success_count": successCount,
-                "failure_count": failureCount,
-            },
-        }
-        
-        if err := pluginService.ExecuteHook(ctx, pluginPkg.HookPostDeploy, hookData); err != nil {
-            ui.ShowWarning(fmt.Sprintf("Post-deploy hook warning: %v", err))
-        }
-        
-        // Execute success or error hooks
-        if deploymentSuccess {
-            if err := pluginService.ExecuteHook(ctx, pluginPkg.HookOnSuccess, hookData); err != nil {
-                ui.ShowWarning(fmt.Sprintf("Success hook warning: %v", err))
-            }
-        } else {
-            hookData.Error = fmt.Errorf("deployment completed with %d errors", failureCount)
-            if err := pluginService.ExecuteHook(ctx, pluginPkg.HookOnError, hookData); err != nil {
-                ui.ShowWarning(fmt.Sprintf("Error hook warning: %v", err))
-            }
-        }
-        
-        // Execute finish hook
-        if err := pluginService.ExecuteHook(ctx, pluginPkg.HookOnFinish, hookData); err != nil {
-            ui.ShowWarning(fmt.Sprintf("Finish hook warning: %v", err))
-        }
-        
-        // Send notification
-        var notificationLevel pluginPkg.NotificationLevel
-        var title, message string
-        
-        if deploymentSuccess {
-            notificationLevel = pluginPkg.NotificationLevelSuccess
-            title = "Deployment Successful"
-            message = fmt.Sprintf("Successfully deployed %d files to %s", successCount, repoName)
-        } else {
-            notificationLevel = pluginPkg.NotificationLevelError
-            title = "Deployment Failed"
-            message = fmt.Sprintf("Deployment failed: %d succeeded, %d failed", successCount, failureCount)
-        }
-        
-        notification := pluginPkg.NotificationMessage{
-            Title:        title,
-            Message:      message,
-            Level:        notificationLevel,
-            Timestamp:    time.Now(),
-            Source:       "flakedrop",
-            DeploymentID: deploymentID,
-            Repository:   repoName,
-            Commit:       commit,
-            Metadata:     hookData.Metadata,
-        }
-        
-        if err := pluginService.SendNotification(ctx, notification); err != nil {
-            ui.ShowWarning(fmt.Sprintf("Notification warning: %v", err))
-        }
-    }
-    
-    // Show final summary
-    fmt.Println()
-    if failureCount == 0 {
-        ui.ShowSuccess(fmt.Sprintf("Deployment completed successfully! %d files deployed.", successCount))
-    } else {
-        ui.ShowError(fmt.Errorf("Deployment completed with errors: %d succeeded, %d failed", successCount, failureCount))
-    }
-}
 
 func formatDuration(d time.Duration) string {
     if d < time.Second {
@@ -507,6 +349,46 @@ func executeRealDeployment(ctx context.Context, appConfig *models.Config, files 
         defer snowflakeService.Close()
     }
     
+    // Initialize rollback manager if enabled
+    var rollbackManager *rollback.Manager
+    if appConfig.Deployment.Rollback.Enabled && !dryRun {
+        rollbackConfig := &rollback.Config{
+            StorageDir:         filepath.Join(os.Getenv("HOME"), ".flakedrop", "rollback"),
+            EnableAutoSnapshot: appConfig.Deployment.Rollback.OnFailure,
+            SnapshotRetention:  time.Duration(appConfig.Deployment.Rollback.BackupRetention) * 24 * time.Hour,
+            BackupRetention:    time.Duration(appConfig.Deployment.Rollback.BackupRetention) * 24 * time.Hour,
+            MaxRollbackDepth:   10,
+            DryRunByDefault:    false,
+        }
+        
+        var err error
+        rollbackManager, err = rollback.NewManager(snowflakeService, rollbackConfig)
+        if err != nil {
+            ui.ShowWarning(fmt.Sprintf("Failed to initialize rollback manager: %v", err))
+            // Continue without rollback support
+        }
+    }
+    
+    // Start deployment tracking
+    var deploymentRecord *rollback.DeploymentRecord
+    if rollbackManager != nil {
+        deploymentRecord = &rollback.DeploymentRecord{
+            ID:           deploymentID,
+            Repository:   repoName,
+            Commit:       commit,
+            Database:     repoConfig.Database,
+            Schema:       repoConfig.Schema,
+            StartTime:    time.Now(),
+            State:        rollback.StateInProgress,
+            Files:        make([]rollback.FileExecution, 0),
+            Metadata:     make(map[string]string),
+        }
+        
+        if err := rollbackManager.StartDeployment(ctx, deploymentRecord); err != nil {
+            ui.ShowWarning(fmt.Sprintf("Failed to start deployment tracking: %v", err))
+        }
+    }
+    
     pb := ui.NewProgressBar(len(files))
     successCount := 0
     failureCount := 0
@@ -556,6 +438,40 @@ func executeRealDeployment(ctx context.Context, appConfig *models.Config, files 
     }
     
     pb.Finish()
+    
+    // Complete deployment tracking and handle rollback if needed
+    if rollbackManager != nil && deploymentRecord != nil {
+        success := failureCount == 0
+        errorMessage := ""
+        if !success {
+            errorMessage = fmt.Sprintf("Deployment failed with %d errors", failureCount)
+        }
+        
+        // Complete the deployment
+        if err := rollbackManager.CompleteDeployment(ctx, deploymentID, success, errorMessage); err != nil {
+            ui.ShowWarning(fmt.Sprintf("Failed to complete deployment tracking: %v", err))
+        }
+        
+        // If deployment failed and auto-rollback is enabled, perform rollback
+        if !success && appConfig.Deployment.Rollback.OnFailure {
+            ui.ShowWarning("Deployment failed. Initiating automatic rollback...")
+            
+            // Prepare rollback options
+            rollbackOptions := &rollback.RollbackOptions{
+                Strategy:    rollback.RollbackStrategy(appConfig.Deployment.Rollback.Strategy),
+                DryRun:      false,
+                StopOnError: false,
+            }
+            
+            // Execute rollback
+            result, err := rollbackManager.RollbackDeployment(ctx, deploymentID, rollbackOptions)
+            if err != nil {
+                ui.ShowError(fmt.Errorf("rollback failed: %w", err))
+            } else {
+                ui.ShowSuccess(fmt.Sprintf("Rollback completed successfully. %d operations executed.", len(result.Operations)))
+            }
+        }
+    }
     
     // Show final results
     fmt.Println()

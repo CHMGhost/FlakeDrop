@@ -3,11 +3,17 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/spf13/cobra"
+	"flakedrop/internal/common"
+	"flakedrop/internal/config"
 	"flakedrop/internal/observability"
+	"flakedrop/internal/snowflake"
 	"flakedrop/internal/ui"
+	"flakedrop/pkg/models"
 )
 
 var (
@@ -111,11 +117,18 @@ func runMonitoredDeploy(cmd *cobra.Command, args []string) {
 	// Show header
 	ui.ShowHeader(fmt.Sprintf("FlakeDrop - Repository: %s", repoName))
 	
+	// Load configuration
+	appConfig, err := config.Load()
+	if err != nil {
+		ui.ShowError(fmt.Errorf("failed to load configuration: %w", err))
+		return
+	}
+	
 	// Execute deployment with observability
-	executeMonitoredDeployment(ctx, repoName, logger, registry, span)
+	executeMonitoredDeployment(ctx, repoName, appConfig, logger, registry, span)
 }
 
-func executeMonitoredDeployment(ctx context.Context, repoName string, logger *observability.Logger, registry *observability.MetricsRegistry, parentSpan *observability.Span) {
+func executeMonitoredDeployment(ctx context.Context, repoName string, appConfig *models.Config, logger *observability.Logger, registry *observability.MetricsRegistry, parentSpan *observability.Span) {
 	// Track deployment start
 	if counter, ok := registry.GetCounter("deployments_total"); ok {
 		counter.Inc()
@@ -180,7 +193,10 @@ func executeMonitoredDeployment(ctx context.Context, repoName string, logger *ob
 		span.SetTag("component", "git")
 		
 		logger.Info("Fetching recent commits...")
-		commits = getRecentCommits()
+		commits, err = getRealCommits(appConfig, repoName)
+		if err != nil {
+			return fmt.Errorf("failed to get commits: %w", err)
+		}
 		
 		span.SetTag("commit_count", len(commits))
 		logger.InfoWithFields("Retrieved commits", map[string]interface{}{
@@ -213,7 +229,11 @@ func executeMonitoredDeployment(ctx context.Context, repoName string, logger *ob
 			selectedCommit = monitoredDeployCommit
 			span.SetTag("selection_method", "provided")
 			span.SetTag("commit_hash", selectedCommit)
-			ui.ShowInfo(fmt.Sprintf("Using commit: %s", selectedCommit[:7]))
+			displayCommit := selectedCommit
+			if len(selectedCommit) > 7 {
+				displayCommit = selectedCommit[:7]
+			}
+			ui.ShowInfo(fmt.Sprintf("Using commit: %s", displayCommit))
 			logger.InfoWithFields("Using provided commit", map[string]interface{}{
 				"commit": selectedCommit,
 			})
@@ -233,7 +253,11 @@ func executeMonitoredDeployment(ctx context.Context, repoName string, logger *ob
 			if len(commits) > 0 {
 				selectedCommit = commits[0].Hash
 				span.SetTag("commit_hash", selectedCommit)
-				ui.ShowInfo(fmt.Sprintf("Using latest commit: %s", selectedCommit[:7]))
+				displayCommit := selectedCommit
+				if len(selectedCommit) > 7 {
+					displayCommit = selectedCommit[:7]
+				}
+				ui.ShowInfo(fmt.Sprintf("Using latest commit: %s", displayCommit))
 				logger.InfoWithFields("Using latest commit", map[string]interface{}{
 					"commit": selectedCommit,
 				})
@@ -262,7 +286,12 @@ func executeMonitoredDeployment(ctx context.Context, repoName string, logger *ob
 			"commit": selectedCommit,
 		})
 		
-		files = getFilesToDeploy(selectedCommit)
+		// Get real files from repository
+		realFiles, err := getRealFilesToDeploy(appConfig, repoName)
+		if err != nil {
+			return fmt.Errorf("failed to get files: %w", err)
+		}
+		files = realFiles
 		
 		span.SetTag("file_count", len(files))
 		logger.InfoWithFields("Files analyzed", map[string]interface{}{
@@ -300,7 +329,7 @@ func executeMonitoredDeployment(ctx context.Context, repoName string, logger *ob
 	}
 	
 	// Execute deployment with comprehensive monitoring
-	deploymentSuccess = executeMonitoredDeploymentFiles(ctx, files, monitoredDeployDryRun, logger, registry)
+	deploymentSuccess = executeMonitoredDeploymentFiles(ctx, files, monitoredDeployDryRun, logger, registry, appConfig, repoName)
 	
 	if deploymentSuccess {
 		logger.Info("Deployment completed successfully")
@@ -312,7 +341,7 @@ func executeMonitoredDeployment(ctx context.Context, repoName string, logger *ob
 	}
 }
 
-func executeMonitoredDeploymentFiles(ctx context.Context, files []string, dryRun bool, logger *observability.Logger, registry *observability.MetricsRegistry) bool {
+func executeMonitoredDeploymentFiles(ctx context.Context, files []string, dryRun bool, logger *observability.Logger, registry *observability.MetricsRegistry, appConfig *models.Config, repoName string) bool {
 	span, ctx := observability.StartSpanFromContext(ctx, "deployment.execute_files")
 	defer span.Finish()
 	
@@ -357,7 +386,7 @@ func executeMonitoredDeploymentFiles(ctx context.Context, files []string, dryRun
 			fileSpan.SetTag("result", "skipped")
 			fileLogger.Info("File execution skipped (dry-run)")
 		} else {
-			// Simulate actual execution with monitoring
+			// Execute the actual SQL file
 			start := time.Now()
 			
 			// Track Snowflake query
@@ -365,11 +394,8 @@ func executeMonitoredDeploymentFiles(ctx context.Context, files []string, dryRun
 				counter.Inc()
 			}
 			
-			// Simulate file execution (with realistic timing)
-			time.Sleep(time.Duration(500+i*100) * time.Millisecond)
-			
-			// Simulate random failure for demo (third file fails)
-			success = i != 2
+			// Need to create Snowflake service and execute file
+			success, errorMsg = executeActualFile(ctx, file, appConfig, repoName, fileLogger)
 			duration = time.Since(start)
 			
 			// Record query duration
@@ -383,7 +409,6 @@ func executeMonitoredDeploymentFiles(ctx context.Context, files []string, dryRun
 					"duration_ms": duration.Milliseconds(),
 				})
 			} else {
-				errorMsg = "Syntax error at line 42"
 				fileSpan.SetTag("result", "failure")
 				fileSpan.SetTag("error", errorMsg)
 				fileSpan.SetStatus(observability.SpanStatusError)
@@ -481,5 +506,63 @@ func (d *DeploymentHealthCheck) Check(ctx context.Context) observability.HealthR
 			"avg_latency_ms":      50,
 		},
 	}
+}
+
+// executeActualFile executes a SQL file against Snowflake
+func executeActualFile(ctx context.Context, file string, appConfig *models.Config, repoName string, logger *observability.Logger) (bool, string) {
+	// Find repository configuration
+	var repoConfig *models.Repository
+	for _, repo := range appConfig.Repositories {
+		if repo.Name == repoName {
+			repoConfig = &repo
+			break
+		}
+	}
+	
+	if repoConfig == nil {
+		return false, fmt.Sprintf("repository '%s' not found", repoName)
+	}
+	
+	// Get repository path
+	repoPath := repoConfig.GitURL
+	if !filepath.IsAbs(repoPath) {
+		wd, _ := os.Getwd()
+		repoPath = filepath.Join(wd, repoPath)
+	}
+	
+	// Get full file path
+	fullPath := filepath.Join(repoPath, file)
+	
+	// Validate file path
+	validatedPath, err := common.ValidatePath(fullPath, repoPath)
+	if err != nil {
+		return false, fmt.Sprintf("invalid file path: %v", err)
+	}
+	
+	// Create Snowflake service
+	snowflakeConfig := snowflake.Config{
+		Account:   appConfig.Snowflake.Account,
+		Username:  appConfig.Snowflake.Username,
+		Password:  appConfig.Snowflake.Password,
+		Database:  repoConfig.Database,
+		Schema:    repoConfig.Schema,
+		Warehouse: appConfig.Snowflake.Warehouse,
+		Role:      appConfig.Snowflake.Role,
+		Timeout:   30 * time.Second,
+	}
+	
+	snowflakeService := snowflake.NewService(snowflakeConfig)
+	if err := snowflakeService.Connect(); err != nil {
+		return false, fmt.Sprintf("failed to connect to Snowflake: %v", err)
+	}
+	defer snowflakeService.Close()
+	
+	// Execute SQL file
+	err = snowflakeService.ExecuteFile(validatedPath, repoConfig.Database, repoConfig.Schema)
+	if err != nil {
+		return false, err.Error()
+	}
+	
+	return true, ""
 }
 

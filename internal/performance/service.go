@@ -229,8 +229,13 @@ func (s *OptimizedService) analyzeDeploymentStrategy(files []string) DeploymentS
 
 // deployParallel deploys files using parallel processing
 func (s *OptimizedService) deployParallel(ctx context.Context, files []string, database, schema string) error {
-	span, _ := s.profiler.StartSpan("deployment", "parallel", nil)
-	defer span.End()
+	var span *Span
+	if s.config.EnableProfiling && s.profiler != nil {
+		span, _ = s.profiler.StartSpan("deployment", "parallel", nil)
+		if span != nil {
+			defer span.End()
+		}
+	}
 
 	// Create tasks for each file
 	tasks := make([]Task, 0, len(files))
@@ -290,8 +295,13 @@ func (s *OptimizedService) deployParallel(ctx context.Context, files []string, d
 
 // deployBatch deploys files using batch processing
 func (s *OptimizedService) deployBatch(ctx context.Context, files []string, database, schema string) error {
-	span, _ := s.profiler.StartSpan("deployment", "batch", nil)
-	defer span.End()
+	var span *Span
+	if s.config.EnableProfiling && s.profiler != nil {
+		span, _ = s.profiler.StartSpan("deployment", "batch", nil)
+		if span != nil {
+			defer span.End()
+		}
+	}
 
 	for _, file := range files {
 		content, err := s.readFile(file)
@@ -322,8 +332,13 @@ func (s *OptimizedService) deployBatch(ctx context.Context, files []string, data
 
 // deployStream deploys files using streaming for large files
 func (s *OptimizedService) deployStream(ctx context.Context, files []string, database, schema string) error {
-	span, _ := s.profiler.StartSpan("deployment", "stream", nil)
-	defer span.End()
+	var span *Span
+	if s.config.EnableProfiling && s.profiler != nil {
+		span, _ = s.profiler.StartSpan("deployment", "stream", nil)
+		if span != nil {
+			defer span.End()
+		}
+	}
 
 	for _, file := range files {
 		fileTimer := s.monitor.StartTimer("deployment.stream.file", map[string]string{
@@ -342,8 +357,13 @@ func (s *OptimizedService) deployStream(ctx context.Context, files []string, dat
 
 // deployHybrid uses a combination of strategies
 func (s *OptimizedService) deployHybrid(ctx context.Context, files []string, database, schema string) error {
-	span, _ := s.profiler.StartSpan("deployment", "hybrid", nil)
-	defer span.End()
+	var span *Span
+	if s.config.EnableProfiling && s.profiler != nil {
+		span, _ = s.profiler.StartSpan("deployment", "hybrid", nil)
+		if span != nil {
+			defer span.End()
+		}
+	}
 
 	// Categorize files
 	var smallFiles, largeFiles []string
@@ -377,8 +397,13 @@ func (s *OptimizedService) deployHybrid(ctx context.Context, files []string, dat
 
 // deploySequential deploys files one by one (fallback)
 func (s *OptimizedService) deploySequential(ctx context.Context, files []string, database, schema string) error {
-	span, _ := s.profiler.StartSpan("deployment", "sequential", nil)
-	defer span.End()
+	var span *Span
+	if s.config.EnableProfiling && s.profiler != nil {
+		span, _ = s.profiler.StartSpan("deployment", "sequential", nil)
+		if span != nil {
+			defer span.End()
+		}
+	}
 
 	// Get a single connection
 	conn, err := s.pool.Get(ctx)

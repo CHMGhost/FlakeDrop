@@ -264,7 +264,7 @@ func (sm *SnapshotManager) captureTables(ctx context.Context, database, schema s
 		AND table_type = 'BASE TABLE'
 	`, database, schema)
 
-	rows, err := sm.snowflakeService.ExecuteQuery(query)
+	rows, err := sm.snowflakeService.ExecuteQueryContext(ctx, query)
 	if err != nil {
 		return nil, err
 	}
@@ -304,7 +304,7 @@ func (sm *SnapshotManager) captureViews(ctx context.Context, database, schema st
 		WHERE table_schema = '%s'
 	`, database, schema)
 
-	rows, err := sm.snowflakeService.ExecuteQuery(query)
+	rows, err := sm.snowflakeService.ExecuteQueryContext(ctx, query)
 	if err != nil {
 		return nil, err
 	}
@@ -342,7 +342,7 @@ func (sm *SnapshotManager) captureProcedures(ctx context.Context, database, sche
 		SHOW PROCEDURES IN SCHEMA %s.%s
 	`, database, schema)
 
-	rows, err := sm.snowflakeService.ExecuteQuery(query)
+	rows, err := sm.snowflakeService.ExecuteQueryContext(ctx, query)
 	if err != nil {
 		return nil, err
 	}
@@ -359,7 +359,7 @@ func (sm *SnapshotManager) captureFunctions(ctx context.Context, database, schem
 		SHOW FUNCTIONS IN SCHEMA %s.%s
 	`, database, schema)
 
-	rows, err := sm.snowflakeService.ExecuteQuery(query)
+	rows, err := sm.snowflakeService.ExecuteQueryContext(ctx, query)
 	if err != nil {
 		return nil, err
 	}
@@ -374,7 +374,7 @@ func (sm *SnapshotManager) captureFunctions(ctx context.Context, database, schem
 func (sm *SnapshotManager) getTableDDL(ctx context.Context, database, schema, table string) (string, error) {
 	query := fmt.Sprintf("SELECT GET_DDL('TABLE', '%s.%s.%s')", database, schema, table)
 	
-	rows, err := sm.snowflakeService.ExecuteQuery(query)
+	rows, err := sm.snowflakeService.ExecuteQueryContext(ctx, query)
 	if err != nil {
 		return "", err
 	}
@@ -394,7 +394,7 @@ func (sm *SnapshotManager) getTableDDL(ctx context.Context, database, schema, ta
 func (sm *SnapshotManager) getViewDDL(ctx context.Context, database, schema, view string) (string, error) {
 	query := fmt.Sprintf("SELECT GET_DDL('VIEW', '%s.%s.%s')", database, schema, view)
 	
-	rows, err := sm.snowflakeService.ExecuteQuery(query)
+	rows, err := sm.snowflakeService.ExecuteQueryContext(ctx, query)
 	if err != nil {
 		return "", err
 	}

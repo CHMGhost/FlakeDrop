@@ -9,7 +9,7 @@ repositories:
     schema: "PUBLIC"
     
 snowflake:
-  account: "xy12345.us-east-1"
+  account: "haa04791.east-us-2.azure"
   username: "DEPLOY_USER"
   password: ""  # Will be encrypted when saved
   role: "DEPLOYMENT_ROLE"
