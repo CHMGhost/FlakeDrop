@@ -10,8 +10,10 @@ import (
 	"flakedrop/internal/config"
 	"flakedrop/internal/security"
 	"flakedrop/internal/ui"
+	"flakedrop/pkg/models"
 
 	"github.com/spf13/cobra"
+	"gopkg.in/yaml.v3"
 )
 
 var securityCmd = &cobra.Command{
@@ -69,6 +71,44 @@ var createUserCmd = &cobra.Command{
 	RunE:  runCreateUser,
 }
 
+var createRoleCmd = &cobra.Command{
+	Use:   "create-role",
+	Short: "Create a new role",
+	Long:  `Create a new role in the access control system with specific permissions.
+
+Permission Format:
+  resource:action1,action2,action3
+
+Resources can use wildcards (*) to match multiple items:
+  - deployment:* matches all deployments
+  - repository:* matches all repositories  
+  - config:* matches all configurations
+  - * matches all resources
+
+Common Actions:
+  - read: View/list resources
+  - create: Create new resources
+  - update: Modify existing resources
+  - delete: Remove resources
+  - * matches all actions
+
+Examples:
+  # Read-only access to all deployments
+  --permissions "deployment:*:read"
+  
+  # Full access to deployments and read access to repos
+  --permissions "deployment:*:read,create,update,delete" --permissions "repository:*:read"
+  
+  # Admin access to everything
+  --permissions "*:*"
+
+Default Roles Available:
+  - admin: Full system access
+  - deployer: Can perform deployments
+  - viewer: Read-only access`,
+	RunE:  runCreateRole,
+}
+
 var assignRoleCmd = &cobra.Command{
 	Use:   "assign-role",
 	Short: "Assign role to user",
@@ -112,6 +152,10 @@ var (
 	userEmail         string
 	userRole          string
 	
+	roleName          string
+	roleDescription   string
+	rolePermissions   []string
+	
 	checkResource     string
 	checkAction       string
 	
@@ -129,6 +173,7 @@ func init() {
 	securityCmd.AddCommand(auditLogCmd)
 	securityCmd.AddCommand(verifyAuditCmd)
 	securityCmd.AddCommand(createUserCmd)
+	securityCmd.AddCommand(createRoleCmd)
 	securityCmd.AddCommand(assignRoleCmd)
 	securityCmd.AddCommand(checkAccessCmd)
 	securityCmd.AddCommand(securityAuditCmd)
@@ -159,6 +204,12 @@ func init() {
 	createUserCmd.Flags().StringVar(&userEmail, "email", "", "Email address (required)")
 	createUserCmd.MarkFlagRequired("username")
 	createUserCmd.MarkFlagRequired("email")
+	
+	// Role management flags
+	createRoleCmd.Flags().StringVar(&roleName, "name", "", "Role name (required)")
+	createRoleCmd.Flags().StringVar(&roleDescription, "description", "", "Role description")
+	createRoleCmd.Flags().StringArrayVar(&rolePermissions, "permissions", []string{}, "Permissions in format resource:action1,action2 (use multiple flags for multiple resources)")
+	createRoleCmd.MarkFlagRequired("name")
 	
 	// Role assignment flags
 	assignRoleCmd.Flags().StringVar(&userName, "user", "", "Username (required)")
@@ -301,15 +352,22 @@ func runScanConfig(cmd *cobra.Command, args []string) error {
 	}
 	defer secManager.Close()
 	
-	// Load configuration
-	appConfig, err := config.Load()
+	// Load raw configuration without decryption for scanning
+	configFile := config.GetConfigFile()
+	data, err := os.ReadFile(configFile)
 	if err != nil {
 		ui.StopProgress()
-		return fmt.Errorf("failed to load configuration: %w", err)
+		return fmt.Errorf("failed to read configuration: %w", err)
 	}
 	
-	// Perform scan
-	report, err := secManager.ScanConfiguration(appConfig)
+	var rawConfig models.Config
+	if err := yaml.Unmarshal(data, &rawConfig); err != nil {
+		ui.StopProgress()
+		return fmt.Errorf("failed to parse configuration: %w", err)
+	}
+	
+	// Perform scan on raw config (with encrypted passwords)
+	report, err := secManager.ScanConfiguration(&rawConfig)
 	if err != nil {
 		ui.StopProgress()
 		return fmt.Errorf("security scan failed: %w", err)
@@ -341,7 +399,7 @@ func runScanConfig(cmd *cobra.Command, args []string) error {
 			if finding.Severity == security.SeverityCritical {
 				ui.Print(fmt.Sprintf("  [%s] %s", finding.RuleID, finding.Message))
 				if finding.Remediation != "" {
-					ui.Print(fmt.Sprintf("    → %s", finding.Remediation))
+					ui.Print(fmt.Sprintf("    TIP: %s", finding.Remediation))
 				}
 			}
 		}
@@ -469,9 +527,9 @@ func runVerifyAudit(cmd *cobra.Command, args []string) error {
 	ui.Print(fmt.Sprintf("Valid Events: %d", report.ValidEvents))
 	
 	if report.IsValid {
-		ui.Success("✓ Integrity verification PASSED")
+		ui.Success("Integrity verification PASSED")
 	} else {
-		ui.Error("✗ Integrity verification FAILED")
+		ui.Error("Integrity verification FAILED")
 		ui.Error("Issues found:")
 		for _, issue := range report.Issues {
 			ui.Print(fmt.Sprintf("  - %s", issue))
@@ -507,6 +565,52 @@ func runCreateUser(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
+func runCreateRole(cmd *cobra.Command, args []string) error {
+	ui := ui.NewUI(false, false)
+	
+	secManager, err := security.NewManager()
+	if err != nil {
+		return fmt.Errorf("failed to initialize security manager: %w", err)
+	}
+	defer secManager.Close()
+	
+	// Parse permissions
+	permissions := []security.Permission{}
+	for _, perm := range rolePermissions {
+		// Trim spaces
+		perm = strings.TrimSpace(perm)
+		parts := strings.SplitN(perm, ":", 2)
+		if len(parts) != 2 {
+			return fmt.Errorf("invalid permission format: %s (expected resource:action,action)", perm)
+		}
+		
+		resource := parts[0]
+		actions := strings.Split(parts[1], ",")
+		
+		permissions = append(permissions, security.Permission{
+			Resource: resource,
+			Actions:  actions,
+		})
+	}
+	
+	// Create role
+	role := &security.Role{
+		Name:        roleName,
+		Description: roleDescription,
+		Permissions: permissions,
+	}
+	
+	err = secManager.GetAccessControl().CreateRole(role)
+	if err != nil {
+		return fmt.Errorf("failed to create role: %w", err)
+	}
+	
+	ui.Success(fmt.Sprintf("Role '%s' created successfully", roleName))
+	ui.Info("Role ID: " + role.ID)
+	
+	return nil
+}
+
 func runAssignRole(cmd *cobra.Command, args []string) error {
 	ui := ui.NewUI(false, false)
 	
@@ -530,8 +634,22 @@ func runAssignRole(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("user '%s' not found", userName)
 	}
 	
+	// Find role by name
+	roles := secManager.GetAccessControl().ListRoles()
+	var roleID string
+	for _, r := range roles {
+		if r.Name == userRole || r.ID == userRole {
+			roleID = r.ID
+			break
+		}
+	}
+	
+	if roleID == "" {
+		return fmt.Errorf("role '%s' not found", userRole)
+	}
+	
 	// Assign role
-	err = secManager.GetAccessControl().AssignRole(userID, userRole)
+	err = secManager.GetAccessControl().AssignRole(userID, roleID)
 	if err != nil {
 		return fmt.Errorf("failed to assign role: %w", err)
 	}

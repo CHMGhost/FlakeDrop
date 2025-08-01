@@ -39,18 +39,18 @@ func ShowHeader(title string) {
 	width := 50
 	padding := (width - len(title) - 2) / 2
 	
-	fmt.Println("\n┌" + strings.Repeat("─", width-2) + "┐")
-	fmt.Printf("│%s%s%s│\n",
+	fmt.Println("\n+" + strings.Repeat("-", width-2) + "+")
+	fmt.Printf("|%s%s%s|\n",
 		strings.Repeat(" ", padding),
 		ColorBold(title),
 		strings.Repeat(" ", width-2-padding-len(title)),
 	)
-	fmt.Println("└" + strings.Repeat("─", width-2) + "┘")
+	fmt.Println("+" + strings.Repeat("-", width-2) + "+")
 }
 
 // ShowError displays a formatted error message
 func ShowError(err error) {
-	fmt.Printf("\n%s %s\n", ColorError("✗"), ColorError("Error:"))
+	fmt.Printf("\n%s %s\n", ColorError("ERROR:"), ColorError("Error:"))
 	
 	// Parse error message for better formatting
 	message := err.Error()
@@ -66,23 +66,23 @@ func ShowError(err error) {
 	
 	// Add helpful suggestions if applicable
 	if suggestion := getSuggestion(message); suggestion != "" {
-		fmt.Printf("\n  %s %s\n", ColorInfo("→"), ColorInfo(suggestion))
+		fmt.Printf("\n  %s %s\n", ColorInfo("TIP:"), ColorInfo(suggestion))
 	}
 }
 
 // ShowSuccess displays a success message
 func ShowSuccess(message string) {
-	fmt.Printf("%s %s\n", ColorSuccess("✓"), message)
+	fmt.Printf("%s %s\n", ColorSuccess("SUCCESS:"), message)
 }
 
 // ShowWarning displays a warning message
 func ShowWarning(message string) {
-	fmt.Printf("%s %s\n", ColorWarning("!"), ColorWarning(message))
+	fmt.Printf("%s %s\n", ColorWarning("WARNING:"), ColorWarning(message))
 }
 
 // ShowInfo displays an info message
 func ShowInfo(message string) {
-	fmt.Printf("%s %s\n", ColorInfo("i"), message)
+	fmt.Printf("%s %s\n", ColorInfo("INFO:"), message)
 }
 
 // Table creates a formatted table
@@ -107,7 +107,7 @@ func (t *Table) AddHeader(columns ...string) {
 	// Add separator
 	separators := make([]string, len(columns))
 	for i := range columns {
-		separators[i] = strings.Repeat("─", len(columns[i]))
+		separators[i] = strings.Repeat("-", len(columns[i]))
 	}
 	fmt.Fprintln(t.writer, strings.Join(separators, "\t"))
 }
@@ -161,21 +161,21 @@ func Box(title, content string) {
 	if borderLen < 0 {
 		borderLen = 0
 	}
-	fmt.Printf("┌─ %s %s┐\n",
+	fmt.Printf("+- %s %s+\n",
 		ColorBold(title),
 		strings.Repeat("─", borderLen),
 	)
 	
 	// Content
 	for _, line := range lines {
-		fmt.Printf("│ %s%s │\n",
+		fmt.Printf("| %s%s |\n",
 			line,
 			strings.Repeat(" ", maxLen-len(line)),
 		)
 	}
 	
 	// Bottom border
-	fmt.Printf("└%s┘\n", strings.Repeat("─", maxLen+3))
+	fmt.Printf("+%s+\n", strings.Repeat("-", maxLen+3))
 }
 
 // getSuggestion returns helpful suggestions based on error messages

@@ -55,6 +55,17 @@ func Load() (*models.Config, error) {
     if err := yaml.Unmarshal(data, &config); err != nil {
         return nil, fmt.Errorf("failed to unmarshal config: %w", err)
     }
+    
+    // Check for environment variable override for password
+    if envPassword := os.Getenv("SNOWFLAKE_PASSWORD"); envPassword != "" {
+        config.Snowflake.Password = envPassword
+    }
+    
+    // Decrypt passwords if encrypted
+    if err := DecryptConfigPasswords(&config); err != nil {
+        return nil, fmt.Errorf("failed to decrypt passwords: %w", err)
+    }
+    
     return &config, nil
 }
 

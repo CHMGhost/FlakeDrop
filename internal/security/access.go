@@ -497,6 +497,8 @@ func (ac *AccessControl) logAccessAttempt(request AccessRequest, decision Access
 // Configuration persistence
 
 func (ac *AccessControl) loadConfig() error {
+	var hasAnyFile bool
+	
 	// Load policies
 	policiesFile := filepath.Join(ac.configPath, "policies.json")
 	validatedPoliciesFile, err := common.ValidatePath(policiesFile, ac.configPath)
@@ -505,9 +507,12 @@ func (ac *AccessControl) loadConfig() error {
 	}
 	data, err := os.ReadFile(validatedPoliciesFile) // #nosec G304 - path is validated
 	if err == nil {
+		hasAnyFile = true
 		if err := json.Unmarshal(data, &ac.policies); err != nil {
 			return fmt.Errorf("failed to unmarshal policies: %w", err)
 		}
+	} else if !os.IsNotExist(err) {
+		return fmt.Errorf("failed to read policies file: %w", err)
 	}
 
 	// Load roles
@@ -518,9 +523,12 @@ func (ac *AccessControl) loadConfig() error {
 	}
 	data, err = os.ReadFile(validatedRolesFile) // #nosec G304 - path is validated
 	if err == nil {
+		hasAnyFile = true
 		if err := json.Unmarshal(data, &ac.roles); err != nil {
 			return fmt.Errorf("failed to unmarshal roles: %w", err)
 		}
+	} else if !os.IsNotExist(err) {
+		return fmt.Errorf("failed to read roles file: %w", err)
 	}
 
 	// Load users
@@ -531,9 +539,17 @@ func (ac *AccessControl) loadConfig() error {
 	}
 	data, err = os.ReadFile(validatedUsersFile) // #nosec G304 - path is validated
 	if err == nil {
+		hasAnyFile = true
 		if err := json.Unmarshal(data, &ac.users); err != nil {
 			return fmt.Errorf("failed to unmarshal users: %w", err)
 		}
+	} else if !os.IsNotExist(err) {
+		return fmt.Errorf("failed to read users file: %w", err)
+	}
+
+	// Return error if no files exist to trigger initialization
+	if !hasAnyFile {
+		return fmt.Errorf("no access control files found")
 	}
 
 	return nil

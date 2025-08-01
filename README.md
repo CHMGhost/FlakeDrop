@@ -220,6 +220,89 @@ flakedrop license show
 flakedrop license activate --key YOUR-LICENSE-KEY
 ```
 
+### Security Features
+
+FlakeDrop includes comprehensive security features for managing credentials, access control, and audit logging:
+
+#### Password Encryption
+
+Protect sensitive passwords in configuration files:
+
+```bash
+# Encrypt passwords in your config file
+flakedrop encrypt-config
+
+# Or use environment variable (recommended for CI/CD)
+export SNOWFLAKE_PASSWORD="your-password"
+```
+
+#### Access Control
+
+Manage users and roles with fine-grained permissions:
+
+```bash
+# View security status
+flakedrop security status
+
+# Create a new user
+flakedrop security create-user --username john.doe --email john.doe@company.com
+
+# Create a custom role with specific permissions
+flakedrop security create-role --name developer \
+  --description "Developer role with deployment permissions" \
+  --permissions "deployment:*:read,create,update" \
+  --permissions "repository:*:read" \
+  --permissions "config:*:read"
+
+# Assign role to user
+flakedrop security assign-role --user john.doe --role developer
+
+# Check user permissions
+flakedrop security check-access --user john.doe --action create --resource deployment:prod
+```
+
+#### Security Scanning
+
+Scan configurations for security vulnerabilities:
+
+```bash
+# Scan current configuration
+flakedrop security scan-config
+
+# Generate detailed report
+flakedrop security scan-config --report security-report.json
+```
+
+#### Audit Logging
+
+Track all security-related activities:
+
+```bash
+# View audit logs
+flakedrop security audit-log --days 7
+
+# Filter by user or action
+flakedrop security audit-log --user john.doe --action create
+
+# Verify audit log integrity
+flakedrop security verify-audit
+
+# Comprehensive security audit
+flakedrop security audit --output audit-report.json
+```
+
+#### Credential Management
+
+Securely store and manage credentials:
+
+```bash
+# Store a credential
+flakedrop security store-credential -n github-token -t api_key -v "ghp_xxxx"
+
+# List stored credentials
+flakedrop security list-credentials
+```
+
 ## Configuration
 
 Configuration is stored in `~/.flakedrop/config.yaml`:

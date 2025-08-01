@@ -154,9 +154,9 @@ func (s *Spinner) Stop(success bool, message string) {
 	fmt.Print("\r\033[K")
 	
 	if success {
-		fmt.Printf("%s %s\n", ColorSuccess("✓"), message)
+		fmt.Printf("%s %s\n", ColorSuccess("SUCCESS:"), message)
 	} else {
-		fmt.Printf("%s %s\n", ColorError("✗"), message)
+		fmt.Printf("%s %s\n", ColorError("ERROR:"), message)
 	}
 }
 

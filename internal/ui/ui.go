@@ -97,14 +97,14 @@ func (u *UI) StopProgress() {
 // Warning prints a warning message
 func (u *UI) Warning(message string) {
 	if !u.Quiet {
-		fmt.Printf("%s %s\n", ColorWarning("⚠"), message)
+		fmt.Printf("%s %s\n", ColorWarning("WARNING:"), message)
 	}
 }
 
 // Error prints an error message
 func (u *UI) Error(message string) {
 	if !u.Quiet {
-		fmt.Printf("%s %s\n", ColorError("✗"), message)
+		fmt.Printf("%s %s\n", ColorError("ERROR:"), message)
 	}
 }
 
@@ -139,7 +139,7 @@ func PrintError(err error) {
 
 // PrintErrorString prints an error message from a string (for compatibility)
 func PrintErrorString(message string) {
-	fmt.Printf("%s %s\n", ColorError("✗"), ColorError(message))
+	fmt.Printf("%s %s\n", ColorError("ERROR:"), ColorError(message))
 }
 
 // PrintWarning prints a warning message (global function for compatibility)
@@ -154,13 +154,13 @@ func PrintInfo(message string) {
 
 // PrintSection prints a section header
 func PrintSection(title string) {
-	fmt.Printf("\n%s %s\n", ColorBold("▶"), ColorBold(title))
-	fmt.Println(strings.Repeat("─", 50))
+	fmt.Printf("\n%s %s\n", ColorBold("==>"), ColorBold(title))
+	fmt.Println(strings.Repeat("-", 50))
 }
 
 // PrintSubsection prints a subsection header
 func PrintSubsection(title string) {
-	fmt.Printf("\n  %s %s\n", ColorInfo("▸"), ColorInfo(title))
+	fmt.Printf("\n  %s %s\n", ColorInfo("->"), ColorInfo(title))
 }
 
 // PrintKeyValue prints a key-value pair in a formatted way
@@ -315,16 +315,16 @@ func ShowDeploymentSummary(files []string, commit string) {
 	
 	if len(files) <= 10 {
 		for _, file := range files {
-			fmt.Printf("  • %s\n", file)
+			fmt.Printf("  - %s\n", file)
 		}
 	} else {
 		// Show first 5 and last 5
 		for i := 0; i < 5; i++ {
-			fmt.Printf("  • %s\n", files[i])
+			fmt.Printf("  - %s\n", files[i])
 		}
 		fmt.Printf("  %s\n", ColorDim(fmt.Sprintf("... %d more files ...", len(files)-10)))
 		for i := len(files) - 5; i < len(files); i++ {
-			fmt.Printf("  • %s\n", files[i])
+			fmt.Printf("  - %s\n", files[i])
 		}
 	}
 	
@@ -334,7 +334,7 @@ func ShowDeploymentSummary(files []string, commit string) {
 // ShowFileExecution displays current file execution status
 func ShowFileExecution(file string, current, total int) {
 	fmt.Printf("\n%s Executing [%d/%d]: %s\n",
-		ColorProgress("►"),
+		ColorProgress("RUNNING:"),
 		current,
 		total,
 		ColorBold(file),
@@ -345,13 +345,13 @@ func ShowFileExecution(file string, current, total int) {
 func ShowExecutionResult(file string, success bool, message string, duration string) {
 	if success {
 		fmt.Printf("  %s %s (%s)\n",
-			ColorSuccess("✓"),
+			ColorSuccess("SUCCESS:"),
 			file,
 			ColorDim(duration),
 		)
 	} else {
 		fmt.Printf("  %s %s\n",
-			ColorError("✗"),
+			ColorError("FAILED:"),
 			file,
 		)
 		if message != "" {
@@ -382,7 +382,7 @@ func ShowLogo() {
 // ShowHelp displays contextual help
 func ShowHelp(commands map[string]string) {
 	fmt.Println(ColorBold("\nAvailable Commands:"))
-	fmt.Println(strings.Repeat("─", 50))
+	fmt.Println(strings.Repeat("-", 50))
 	
 	for cmd, desc := range commands {
 		fmt.Printf("  %-20s %s\n", ColorInfo(cmd), desc)

@@ -554,8 +554,11 @@ func (s *Scanner) checkConfigSecurity(config map[string]interface{}) []Finding {
 
 	// Check for plaintext passwords in config
 	if checkConfigValue(config, "password", func(v interface{}) bool {
-		if str, ok := v.(string); ok && str != "" && !strings.HasPrefix(str, "$") {
-			return true
+		if str, ok := v.(string); ok && str != "" {
+			// Check if password is not encrypted (doesn't start with ENC[ or $)
+			if !strings.HasPrefix(str, "ENC[") && !strings.HasPrefix(str, "$") {
+				return true
+			}
 		}
 		return false
 	}) {
@@ -563,7 +566,7 @@ func (s *Scanner) checkConfigSecurity(config map[string]interface{}) []Finding {
 			RuleID:      "CONFIG003",
 			Severity:    SeverityCritical,
 			Message:     "Plaintext password in configuration",
-			Remediation: "Encrypt passwords in configuration files",
+			Remediation: "Encrypt passwords using 'flakedrop encrypt-config' or use SNOWFLAKE_PASSWORD environment variable",
 		})
 	}
 
