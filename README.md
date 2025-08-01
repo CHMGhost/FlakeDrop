@@ -21,16 +21,6 @@ A powerful platform for deploying SQL changes from Git repositories to Snowflake
 - **Visual Diff Display**: Side-by-side comparison with color-coded differences
 - **Version Tracking**: Save and compare historical schema versions
 
-### GUI/SaaS Features (Coming Soon)
-- **Web-Based Interface**: Modern, intuitive web UI for managing deployments
-- **Team Collaboration**: Multi-user support with role-based access control
-- **Deployment Pipelines**: Visual pipeline builder for complex deployment workflows
-- **Approval Workflows**: Built-in approval processes for production deployments
-- **Real-Time Monitoring**: Live dashboards for deployment status and health
-- **API Access**: RESTful API for integration with existing tools
-- **Audit Compliance**: Enterprise-grade audit logging and compliance reporting
-- **Cloud-Native**: Hosted SaaS option with automatic updates and maintenance
-
 ## Editions
 
 ### Community Edition (CLI)
@@ -38,18 +28,6 @@ A powerful platform for deploying SQL changes from Git repositories to Snowflake
 - Full feature set for individual developers
 - Self-hosted deployment
 - Community support
-
-### Professional Edition (Coming Soon)
-- Web-based GUI interface
-- Team collaboration features
-- Priority support
-- Self-hosted or SaaS options
-
-### Enterprise Edition (Coming Soon)
-- Advanced security and compliance features
-- Custom integrations
-- Dedicated support
-- On-premises or private cloud deployment
 
 ## Quick Start
 
@@ -413,9 +391,8 @@ go test -tags=integration ./test/integration
 FlakeDrop uses a dual licensing model:
 
 - **Community Edition (CLI)**: Licensed under the MIT License - free for any use
-- **Professional & Enterprise Editions (GUI/SaaS)**: Commercial license required
 
-Copyright (c) 2024 FlakeDrop. All rights reserved.
+Copyright (c) 2025 FlakeDrop. All rights reserved.
 
 See [LICENSE](LICENSE) file for complete licensing details.
 
