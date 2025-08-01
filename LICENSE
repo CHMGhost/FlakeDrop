@@ -1,50 +1,50 @@
+# FlakeDrop Community Edition License
+
+MIT License
+
 Copyright (c) 2025 FlakeDrop
 
-This software is proprietary and confidential. All rights reserved.
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
 
-DUAL LICENSING MODEL:
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
 
-1. COMMUNITY EDITION LICENSE (CLI)
-   
-   The command-line interface (CLI) version of FlakeDrop is licensed under the MIT License:
-   
-   Permission is hereby granted, free of charge, to any person obtaining a copy
-   of this software and associated documentation files (the "Software"), to deal
-   in the Software without restriction, including without limitation the rights
-   to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-   copies of the Software, and to permit persons to whom the Software is
-   furnished to do so, subject to the following conditions:
-   
-   The above copyright notice and this permission notice shall be included in all
-   copies or substantial portions of the Software.
-   
-   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-   FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-   AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-   SOFTWARE.
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
 
-2. COMMERCIAL LICENSE (GUI/SaaS)
-   
-   The web-based GUI and SaaS versions of FlakeDrop, including Professional and
-   Enterprise editions, are licensed under a commercial license.
-   
-   - This license grants you the right to use the software according to the terms
-     of your subscription or license agreement
-   - Redistribution of the commercial version is prohibited
-   - Reverse engineering, decompilation, or disassembly is prohibited
-   - The software includes proprietary features and intellectual property
-   
-   For commercial licensing inquiries, please contact: licensing@flakedrop.com
+---
 
-3. CONTRIBUTOR LICENSE AGREEMENT
-   
-   By contributing to this project, you agree that your contributions will be
-   licensed under the same dual licensing model as the project.
+## FlakeDrop Community Edition
 
-NOTICE: This software contains both open-source and proprietary components.
-Please ensure you are using the appropriate version according to your license.
+This license applies to the FlakeDrop Community Edition, which includes:
 
-For more information, visit: https://flakedrop.com/licensing
+- Command-line interface (CLI)
+- Core deployment functionality
+- Git repository integration
+- Basic rollback capabilities
+- Schema comparison tools
+- Standard security features
+
+For enterprise features such as web GUI, advanced security, SSO integration, 
+and commercial support, please see FlakeDrop Enterprise Edition.
+
+## Contributing
+
+By contributing to FlakeDrop Community Edition, you agree that your contributions 
+will be licensed under the MIT License. You retain copyright to your contributions.
+
+## More Information
+
+- Website: https://flakedrop.io
+- Documentation: https://github.com/CHMGhost/FlakeDrop/docs
+- Support: https://github.com/CHMGhost/FlakeDrop/issues
