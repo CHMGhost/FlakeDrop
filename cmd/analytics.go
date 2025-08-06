@@ -93,7 +93,7 @@ var analyticsExportCmd = &cobra.Command{
         if output == "" {
             fmt.Println(string(data))
         } else {
-            if err := os.WriteFile(output, data, 0644); err != nil {
+            if err := os.WriteFile(output, data, 0600); err != nil {
                 return fmt.Errorf("failed to write export file: %w", err)
             }
             fmt.Printf("✓ Analytics data exported to %s\n", output)

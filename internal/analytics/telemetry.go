@@ -5,8 +5,10 @@ import (
     "encoding/json"
     "fmt"
     "net/http"
+    "net/url"
     "os"
     "runtime"
+    "strings"
     "time"
 )
 
@@ -119,7 +121,13 @@ func (m *Manager) CheckForUpdates() (*UpdateInfo, error) {
         }
         endpoint = endpoint + "/v1/version/latest"
     }
-    resp, err := http.Get(endpoint)
+    
+    // Validate URL to prevent SSRF
+    if !isValidTelemetryURL(endpoint) {
+        return nil, fmt.Errorf("invalid telemetry endpoint")
+    }
+    
+    resp, err := http.Get(endpoint) // #nosec G107 - URL is validated
     if err != nil {
         return nil, err
     }
@@ -221,4 +229,41 @@ func (m *Manager) calculateErrorRate() float64 {
         return 0
     }
     return float64(stats.FailedDeploys) / float64(stats.TotalDeployments)
+}
+
+// isValidTelemetryURL validates that the URL is a valid telemetry endpoint
+func isValidTelemetryURL(endpoint string) bool {
+    // Parse the URL
+    u, err := url.Parse(endpoint)
+    if err != nil {
+        return false
+    }
+    
+    // Only allow HTTPS
+    if u.Scheme != "https" {
+        return false
+    }
+    
+    // Only allow specific domains
+    allowedHosts := []string{
+        "telemetry.flakedrop.io",
+        "api.flakedrop.io",
+        "localhost",
+        "127.0.0.1",
+    }
+    
+    host := strings.ToLower(u.Hostname())
+    for _, allowed := range allowedHosts {
+        if host == allowed {
+            return true
+        }
+    }
+    
+    // Allow custom endpoints via environment variable
+    customEndpoint := os.Getenv("FLAKEDROP_ALLOW_CUSTOM_TELEMETRY")
+    if customEndpoint == "true" {
+        return true
+    }
+    
+    return false
 }

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -354,7 +355,7 @@ func runScanConfig(cmd *cobra.Command, args []string) error {
 	
 	// Load raw configuration without decryption for scanning
 	configFile := config.GetConfigFile()
-	data, err := os.ReadFile(configFile)
+	data, err := os.ReadFile(filepath.Clean(configFile))
 	if err != nil {
 		ui.StopProgress()
 		return fmt.Errorf("failed to read configuration: %w", err)

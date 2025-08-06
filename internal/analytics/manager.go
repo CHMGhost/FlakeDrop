@@ -231,6 +231,7 @@ func loadOrCreateConfig() *Config {
     }
 
     configPath := filepath.Join(homeDir, ".flakedrop", "analytics.json")
+    configPath = filepath.Clean(configPath)
     data, err := os.ReadFile(configPath)
     if err != nil {
         return DefaultConfig()

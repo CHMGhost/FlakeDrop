@@ -455,7 +455,7 @@ func executeRealDeployment(ctx context.Context, appConfig *models.Config, files 
         
         if dryRun {
             // In dry run, just validate the file exists and is readable
-            content, err := os.ReadFile(validatedPath)
+            content, err := os.ReadFile(filepath.Clean(validatedPath))
             if err != nil {
                 ui.ShowError(fmt.Errorf("failed to read %s: %w", file, err))
                 failureCount++

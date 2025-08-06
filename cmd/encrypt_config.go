@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"flakedrop/internal/config"
 	"flakedrop/internal/ui"
@@ -49,7 +50,7 @@ func runEncryptConfig(cmd *cobra.Command, args []string) error {
 	// Determine config file path
 	var configFile string
 	if configPath != "" {
-		configFile = configPath
+		configFile = filepath.Clean(configPath)
 	} else {
 		configFile = config.GetConfigFile()
 	}
@@ -57,7 +58,7 @@ func runEncryptConfig(cmd *cobra.Command, args []string) error {
 	ui.Info(fmt.Sprintf("Reading configuration from: %s", configFile))
 	
 	// Read raw config file
-	data, err := os.ReadFile(configFile)
+	data, err := os.ReadFile(filepath.Clean(configFile))
 	if err != nil {
 		return fmt.Errorf("failed to read config file: %w", err)
 	}
