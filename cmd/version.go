@@ -8,9 +8,9 @@ import (
 
 var (
 	// Version is set at build time
-	Version = "v1.2.2"
+	Version = "v1.3.0"
 	// BuildTime is set at build time
-	BuildTime = "2025-08-01"
+	BuildTime = "2025-08-06"
 )
 
 // versionCmd represents the version command

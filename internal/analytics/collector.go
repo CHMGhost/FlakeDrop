@@ -447,5 +447,5 @@ func captureStackTrace() string {
 
 func getVersion() string {
     // This would be populated from build info
-    return "1.0.0"
+    return "v1.3.0"
 }
