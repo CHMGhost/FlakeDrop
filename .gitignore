@@ -67,6 +67,10 @@ final_app_name_update.sh
 
 # Test environment directory
 test-env/
+test-telemetry/
+telemetry-test/
+*-test/
+test-*/
 
 # Flakedrop configuration and data directory
 .flakedrop/
