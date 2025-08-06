@@ -56,6 +56,10 @@ func NewCollector(config *Config) *Collector {
 func DefaultConfig() *Config {
     // Get telemetry endpoint from environment or use default
     endpoint := os.Getenv("FLAKEDROP_TELEMETRY_ENDPOINT")
+    if endpoint == "" {
+        // Default to the telemetry server
+        endpoint = "https://telemetry.flakedrop.io"
+    }
     
     return &Config{
         Enabled:        false,
