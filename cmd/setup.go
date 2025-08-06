@@ -3,6 +3,7 @@ package cmd
 import (
     "fmt"
     "os"
+    "flakedrop/internal/analytics"
     "flakedrop/internal/config"
     "flakedrop/pkg/models"
     "github.com/AlecAivazis/survey/v2"
@@ -169,6 +170,10 @@ func runSetup(cmd *cobra.Command, args []string) {
         fmt.Printf("Error saving configuration: %v\n", err)
         os.Exit(1)
     }
+
+    // Track config creation (telemetry)
+    manager := analytics.GetManager()
+    manager.TrackConfigCreated("initial_setup")
 
     fmt.Println()
     fmt.Println("✅ Configuration saved to:", config.GetConfigFile())

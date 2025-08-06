@@ -18,6 +18,7 @@ import (
     "flakedrop/internal/snowflake"
     "flakedrop/internal/rollback"
     "flakedrop/internal/common"
+    "flakedrop/internal/analytics"
     "flakedrop/pkg/models"
     pluginPkg "flakedrop/pkg/plugin"
 )
@@ -57,13 +58,20 @@ func truncateCommitHash(hash string, length int) string {
 }
 
 func runDeploy(cmd *cobra.Command, args []string) {
-    ctx := context.Background()
+    ctx := cmd.Context()
+    if ctx == nil {
+        ctx = context.Background()
+    }
     repoName := args[0]
+    
+    // Track deployment start
+    deploymentStartTime := time.Now()
     
     // Load configuration
     appConfig, err := config.Load()
     if err != nil {
         ui.ShowError(fmt.Errorf("failed to load configuration: %w", err))
+        analytics.TrackError(ctx, err, "deploy_config_load")
         return
     }
     
@@ -158,9 +166,45 @@ func runDeploy(cmd *cobra.Command, args []string) {
     
     // Execute real deployment
     err = executeRealDeployment(ctx, appConfig, files, deployDryRun, deploymentID, repoName, selectedCommit, pluginService)
+    
+    // Track deployment completion
+    deploymentDuration := time.Since(deploymentStartTime)
+    deploymentMetadata := map[string]interface{}{
+        "repository":   repoName,
+        "commit":       selectedCommit,
+        "files_count":  len(files),
+        "dry_run":      deployDryRun,
+        "deployment_id": deploymentID,
+    }
+    
     if err != nil {
         ui.ShowError(err)
+        analytics.TrackError(ctx, err, "deployment_failed")
+        analytics.TrackDeployment(ctx, false, deploymentDuration, deploymentMetadata)
+        
+        // Track REAL deployment failure to telemetry (not dry-run)
+        if !deployDryRun {
+            manager := analytics.GetManager()
+            manager.TrackRealDeployment(false, len(files))
+        }
         return
+    }
+    
+    // Track successful deployment
+    analytics.TrackDeployment(ctx, true, deploymentDuration, deploymentMetadata)
+    
+    // Track REAL deployment to telemetry (not dry-run)
+    if !deployDryRun {
+        manager := analytics.GetManager()
+        manager.TrackRealDeployment(true, len(files))
+    }
+    
+    // Track feature usage
+    if deployDryRun {
+        analytics.TrackFeatureUsage(ctx, "dry_run", nil)
+    }
+    if !deployInteractive {
+        analytics.TrackFeatureUsage(ctx, "non_interactive_deploy", nil)
     }
 }
 
@@ -428,9 +472,19 @@ func executeRealDeployment(ctx context.Context, appConfig *models.Config, files 
             if err != nil {
                 ui.ShowError(fmt.Errorf("failed to execute %s: %w", file, err))
                 failureCount++
+                // Track file execution failure
+                analytics.TrackFeatureUsage(ctx, "file_execution_failed", map[string]interface{}{
+                    "file": file,
+                    "duration_ms": duration.Milliseconds(),
+                })
             } else {
                 ui.ShowSuccess(fmt.Sprintf("✓ Success (%s)", formatDuration(duration)))
                 successCount++
+                // Track successful file execution
+                analytics.TrackFeatureUsage(ctx, "file_execution_success", map[string]interface{}{
+                    "file": file,
+                    "duration_ms": duration.Milliseconds(),
+                })
             }
         }
         
@@ -467,8 +521,13 @@ func executeRealDeployment(ctx context.Context, appConfig *models.Config, files 
             result, err := rollbackManager.RollbackDeployment(ctx, deploymentID, rollbackOptions)
             if err != nil {
                 ui.ShowError(fmt.Errorf("rollback failed: %w", err))
+                analytics.TrackError(ctx, err, "auto_rollback_failed")
             } else {
                 ui.ShowSuccess(fmt.Sprintf("Rollback completed successfully. %d operations executed.", len(result.Operations)))
+                analytics.TrackFeatureUsage(ctx, "auto_rollback_success", map[string]interface{}{
+                    "operations_count": len(result.Operations),
+                    "deployment_id": deploymentID,
+                })
             }
         }
     }

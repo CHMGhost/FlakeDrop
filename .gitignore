@@ -70,3 +70,9 @@ test-env/
 
 # Flakedrop configuration and data directory
 .flakedrop/
+
+# Telemetry deployment scripts
+deploy-telemetry.sh
+fix-nginx-telemetry.sh
+fix-telemetry-service.sh
+secure-telemetry-setup.sh

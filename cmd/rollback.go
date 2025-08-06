@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	"flakedrop/internal/analytics"
 	"flakedrop/internal/config"
 	"flakedrop/internal/rollback"
 	"flakedrop/internal/snowflake"
@@ -119,13 +120,20 @@ func init() {
 }
 
 func runRollbackDeployment(cmd *cobra.Command, args []string) {
-	ctx := context.Background()
+	ctx := cmd.Context()
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	deploymentID := args[0]
+	
+	// Track rollback start
+	rollbackStartTime := time.Now()
 	
 	// Load configuration
 	appConfig, err := config.Load()
 	if err != nil {
 		ui.ShowError(fmt.Errorf("failed to load configuration: %w", err))
+		analytics.TrackError(ctx, err, "rollback_config_load")
 		return
 	}
 	
@@ -192,9 +200,30 @@ func runRollbackDeployment(cmd *cobra.Command, args []string) {
 	result, err := rollbackManager.RollbackDeployment(ctx, deploymentID, options)
 	spinner.Stop(result != nil && result.Success, "")
 	
+	// Track rollback completion
+	rollbackDuration := time.Since(rollbackStartTime)
+	rollbackMetadata := map[string]interface{}{
+		"deployment_id": deploymentID,
+		"strategy":      rollbackStrategy,
+		"dry_run":       rollbackDryRun,
+		"duration_ms":   rollbackDuration.Milliseconds(),
+	}
+	
 	if err != nil {
 		ui.ShowError(fmt.Errorf("rollback failed: %w", err))
+		analytics.TrackError(ctx, err, "rollback_failed")
+		analytics.TrackFeatureUsage(ctx, "manual_rollback_failed", rollbackMetadata)
 		return
+	}
+	
+	// Track successful rollback
+	rollbackMetadata["operations_count"] = len(result.Operations)
+	rollbackMetadata["success"] = result.Success
+	analytics.TrackFeatureUsage(ctx, "manual_rollback_success", rollbackMetadata)
+	
+	// Track feature usage
+	if rollbackDryRun {
+		analytics.TrackFeatureUsage(ctx, "rollback_dry_run", nil)
 	}
 	
 	// Show results
