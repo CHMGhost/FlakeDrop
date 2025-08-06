@@ -44,6 +44,14 @@ func Execute() {
     ctx := context.Background()
     analyticsManager.Initialize(ctx)
     
+    // Send heartbeat if enabled
+    if analyticsManager.IsEnabled() {
+        // Run in goroutine but give it time to complete
+        go func() {
+            analyticsManager.SendHeartbeat()
+        }()
+    }
+    
     if err := rootCmd.Execute(); err != nil {
         if analyticsManager != nil {
             analyticsManager.TrackError(err, "command_execution")

@@ -177,7 +177,9 @@ func (m *Manager) sendTelemetry(eventType string, data interface{}) error {
     
     payload := map[string]interface{}{
         "type": eventType,
-        "data": data,
+        "data": map[string]interface{}{
+            "data": data,
+        },
     }
     
     body, err := json.Marshal(payload)
