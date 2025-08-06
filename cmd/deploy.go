@@ -263,32 +263,59 @@ func getRealCommits(appConfig *models.Config, repoName string) ([]ui.CommitInfo,
         
         timestamp, _ := strconv.ParseInt(parts[4], 10, 64)
         
+        // Count SQL files in this commit
+        sqlFileCount := getSQLFileCount(parts[0])
+        
         commits = append(commits, ui.CommitInfo{
             Hash:      parts[0],
             ShortHash: parts[1],
             Message:   parts[2],
             Author:    parts[3],
             Time:      time.Unix(timestamp, 0),
-            Files:     0, // We can get this with additional git commands if needed
+            Files:     sqlFileCount,
         })
     }
     
     // If no commits found, add HEAD as fallback
     if len(commits) == 0 {
+        headSQLCount := getSQLFileCount("HEAD")
         commits = append(commits, ui.CommitInfo{
             Hash:      "HEAD",
             ShortHash: "HEAD",
             Message:   "Current HEAD",
             Author:    "Unknown",
             Time:      time.Now(),
-            Files:     0,
+            Files:     headSQLCount,
         })
     }
     
     return commits, nil
 }
 
-
+// getSQLFileCount counts SQL files in a specific commit
+func getSQLFileCount(commitHash string) int {
+    // Get files changed in this commit
+    cmd := exec.Command("git", "diff-tree", "--no-commit-id", "--name-only", "-r", commitHash)
+    output, err := cmd.Output()
+    if err != nil {
+        return 0 // Return 0 if we can't get file list
+    }
+    
+    sqlFiles := 0
+    lines := strings.Split(string(output), "\n")
+    
+    for _, line := range lines {
+        if line == "" {
+            continue
+        }
+        // Count files with .sql extension
+        if strings.HasSuffix(strings.ToLower(line), ".sql") {
+            sqlFiles++
+        }
+    }
+    
+    return sqlFiles
+}
 
 func formatDuration(d time.Duration) string {
     if d < time.Second {
